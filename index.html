@@ -3,53 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Shot Log — Step 2</title>
+<title>Shot Log — Step 3</title>
 
 <!--
   ============================================================
-  STEP 2 (v4): penalties, done properly.
+  STEP 3: get the data out.
 
-  Tapping a club means "I am at my ball with this in my hand."
-  One tap. It closes the previous shot and opens the next.
+  localStorage is the browser's storage, not yours. Clearing site
+  data wipes it. A new phone does not carry it. Chrome may evict
+  it under storage pressure without asking. None of that matters
+  when you have one test round in there. All of it matters after
+  six weeks of logging.
 
-  The PENALTY button captures no position. It tags the shot you
-  already logged. Tap it to cycle +1 -> +2 -> clear.
+  So: export before anything else gets built. The rollout tag can
+  wait; irreplaceable data cannot.
 
-  WHY ONE BUTTON AND NOT TWO
-  --------------------------
-  The earlier version had separate Water and OB buttons, on the
-  theory that OB means replaying from the original spot. That is
-  the Rule — but most clubs use the 2019 local rule (E-5) giving
-  two-stroke lateral relief near where the ball went out, and
-  casual play often just drops at the loss point.
+  WHAT EXPORT ACTUALLY IS
+  -----------------------
+  Serialise the whole db object to JSON, wrap it in a Blob, hand
+  the browser an object URL, and click an invisible link. There is
+  no server, nothing uploads. The file lands in your Downloads
+  folder and it is yours.
 
-  So the hazard TYPE does not determine the geometry. The RELIEF
-  YOU TOOK does. And that is not a question worth asking, because
-  your next mark already answers it:
-
-    next mark is NEAR the penalised shot  -> you replayed
-                                          -> distance unknowable
-    next mark is FORWARD                  -> you dropped ahead
-                                          -> distance is a FLOOR
-
-  The only thing the app cannot infer is how many strokes the
-  relief cost. So that is the only thing it asks.
-
-  WHAT IS STORED VS WHAT IS DERIVED
-  ---------------------------------
-  Stored: raw positions, club, penaltyStrokes.
-  Derived: distance, and whether a shot was a replay.
-
-  "Replay" is a JUDGEMENT made with a 20-yard threshold. Do not
-  freeze a judgement into the data. Python gets to re-decide that
-  threshold later, on a laptop, with all the rounds in front of
-  it — and it can only do that if the phone kept its opinions out
-  of the file.
+  Import reads a file back and MERGES by round id rather than
+  overwriting. Importing the same file twice is harmless. That
+  property is called idempotence and it is worth designing for —
+  the alternative is discovering you have eleven copies of
+  Tuesday.
 
   READ THESE IN ORDER:
-    [1] the schema + migrations   (data outlives code)
-    [2] capture                   (one tap, two jobs)
-    [3] distanceFor               (measured / floor / unknown)
+    [1] the schema + migrations
+    [2] exportJson / importJson    (the safety net)
+    [3] distanceFor                (measured / floor / unknown)
   ============================================================
 -->
 
@@ -90,6 +75,7 @@
   button { font-family: var(--sans); cursor: pointer; }
   button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
   [hidden] { display: none !important; }
+  hr { border: none; border-top: 1px solid var(--rule); margin: 2rem 0 1.5rem; }
 
   /* ---- round header ------------------------------------------ */
   .round-bar {
@@ -170,8 +156,7 @@
 
   /* ---- penalty ------------------------------------------------- */
   #penaltyBtn {
-    display: block; width: 100%;
-    padding: 1rem;
+    display: block; width: 100%; padding: 1rem;
     border: 1px solid var(--rule); border-radius: 2px;
     background: transparent; color: var(--muted);
     font: 600 0.8125rem/1 var(--sans);
@@ -215,12 +200,52 @@
 
   .empty { color: var(--muted); font-size: 0.875rem; padding: 1rem 0; }
 
+  /* ---- rounds + data ------------------------------------------- */
+  .rounds { list-style: none; margin: 0 0 1.5rem; padding: 0; }
+  .rounds li {
+    display: grid; grid-template-columns: 1fr auto auto;
+    gap: 0.75rem; align-items: baseline;
+    padding: 0.75rem 0; border-bottom: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 0.8125rem;
+  }
+  .rounds .date { font-weight: 600; }
+  .rounds .meta { color: var(--muted); font-size: 0.75rem; }
+  .rounds .meta.is-sim { color: var(--sim); }
+  .rounds .del {
+    background: none; border: none; padding: 0 0 0 0.5rem;
+    color: var(--muted); font-size: 1rem; line-height: 1;
+  }
+
+  .data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+  .data-actions button, .data-actions label {
+    display: flex; align-items: center; justify-content: center;
+    padding: 0.9375rem 0.5rem;
+    border: 1px solid var(--ink); border-radius: 2px;
+    background: transparent; color: var(--ink);
+    font: 600 0.75rem/1 var(--sans);
+    letter-spacing: 0.06em; text-transform: uppercase;
+    cursor: pointer;
+  }
+  #exportBtn { background: var(--ink); color: var(--paper); }
+  #exportBtn:disabled { background: var(--rule); border-color: var(--rule); color: var(--muted); }
+  #importInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+  .toast {
+    margin-top: 0.875rem; padding: 0.75rem;
+    border-left: 3px solid var(--good);
+    background: rgba(47,107,55,0.08);
+    font-family: var(--mono); font-size: 0.8125rem;
+  }
+  .toast.is-bad { border-left-color: var(--poor); background: rgba(168,80,26,0.08); }
+
+  .fineprint { color: var(--muted); font-size: 0.75rem; line-height: 1.5; margin: 1rem 0 0; }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 
-  <!-- START -->
+  <!-- IDLE: start a round, review history, move data around -->
   <section class="start" id="startScreen" hidden>
     <p class="eyebrow">New round</p>
     <h1>Where are you playing?</h1>
@@ -234,9 +259,28 @@
       <strong>Simulator</strong>
       <span>Flagged separately. Filter or discard later.</span>
     </button>
+
+    <hr>
+
+    <p class="eyebrow">Rounds</p>
+    <ul class="rounds" id="rounds"></ul>
+    <p class="empty" id="roundsEmpty">Nothing logged yet.</p>
+
+    <p class="eyebrow">Data</p>
+    <div class="data-actions">
+      <button id="exportBtn" disabled>Export JSON</button>
+      <label for="importInput">Import JSON</label>
+      <input type="file" id="importInput" accept="application/json,.json">
+    </div>
+    <p class="toast" id="toast" hidden></p>
+
+    <p class="fineprint">
+      Rounds live in this browser's storage on this phone. Clearing site data
+      erases them. Export after every round and keep the file somewhere real.
+    </p>
   </section>
 
-  <!-- ROUND -->
+  <!-- ACTIVE ROUND -->
   <section id="roundScreen" hidden>
     <div class="round-bar">
       <span class="round-bar-left">
@@ -280,34 +324,22 @@
    [1] THE SCHEMA — and its migrations
 
    round = { id, startedAt, endedAt, source: "real"|"sim", shots: [] }
-   shot  = {
-     lat, lng, accuracy, at,
-     club: "7i" | null,        null = ball in the cup
-     penaltyStrokes: 0 | 1 | 2
-   }
+   shot  = { lat, lng, accuracy, at, club: "7i"|null, penaltyStrokes: 0|1|2 }
 
-   Note what is absent: no distance, no "was this a replay", no
-   hazard type. All three are derivable, and derived values must
-   never be stored — the moment you store one it can disagree with
-   the raw data, and then you have two truths.
+   Absent by design: distance, hazard type, "was this a replay".
+   All derivable. Never store what you can compute — the moment a
+   stored copy disagrees with the raw data, you have two truths.
 
-   v1 -> v2 added outcome/penaltyStrokes.
-   v2 -> v3 removes outcome, because "water" vs "ob" turned out to
-   be the wrong distinction. Old data is not lost: any tagged shot
-   simply becomes a 1-stroke penalty, which it always was.
-
-   This is the second migration in about an hour. That is normal,
-   and it is why schemaVersion goes in on day one.
+   round.id is a timestamp, which makes it a stable primary key.
+   That is what lets import merge instead of duplicate.
    ============================================================ */
 
 const STORAGE_KEY = "shotlog:v1";
 const SCHEMA_VERSION = 3;
 
-// Your bag. Edit freely — nothing downstream cares what these strings are.
 const BAG = ["Dr","3w","5w","4h","5i","6i","7i","8i","9i","PW","GW","SW","LW","Putt","?"];
 
-// Below this, a "next shot" is really you standing back on the old spot.
-// A display heuristic only. Never written to storage.
+// A display heuristic, never written to storage. Python re-decides later.
 const REPLAY_THRESHOLD_YARDS = 20;
 
 const EARTH_RADIUS_M = 6371000;
@@ -321,11 +353,8 @@ function migrate(data) {
 
   data.rounds.forEach(round =>
     round.shots.forEach(shot => {
-      // v1 had neither field.
-      shot.penaltyStrokes ??= 0;
-
-      // v2 stored a hazard type. Fold it down to what it really meant.
-      if (shot.outcome) {
+      shot.penaltyStrokes ??= 0;                       // v1 had no penalties
+      if (shot.outcome) {                              // v2 stored a hazard type
         if (shot.outcome !== "in_play") shot.penaltyStrokes ||= 1;
         delete shot.outcome;
       }
@@ -335,8 +364,6 @@ function migrate(data) {
   data.schemaVersion = SCHEMA_VERSION;
   return data;
 }
-
-/* ---- storage -------------------------------------------------- */
 
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -352,6 +379,69 @@ function load() {
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 const activeRound = () => db.rounds.find(r => !r.endedAt) || null;
 const lastShot = round => round.shots[round.shots.length - 1] ?? null;
+
+/* ============================================================
+   [2] EXPORT AND IMPORT — the safety net
+
+   Export: stringify the db, wrap it in a Blob, point an object URL
+   at it, click an invisible <a download>. Nothing uploads. There is
+   no server. The file is yours the moment it hits Downloads.
+
+   Import: read the file, migrate it (old exports are still valid
+   files), then MERGE BY ROUND ID. Importing the same file twice
+   changes nothing. That property is idempotence, and designing for
+   it now is how you avoid owning eleven copies of Tuesday.
+
+   Conflict rule: the round already on this device wins. An import
+   can only ADD rounds, never silently overwrite one you have been
+   adding shots to.
+   ============================================================ */
+
+function exportJson() {
+  const stamp = new Date().toISOString().slice(0, 10);   // YYYY-MM-DD
+  const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "shotlog-" + stamp + ".json";
+  a.click();
+
+  URL.revokeObjectURL(url);   // hand the memory back
+  toast(db.rounds.length + " round(s) exported.");
+}
+
+async function importJson(file) {
+  try {
+    const incoming = migrate(JSON.parse(await file.text()));
+    if (!Array.isArray(incoming.rounds)) throw new Error("no rounds array");
+
+    const known = new Set(db.rounds.map(r => r.id));
+    const fresh = incoming.rounds.filter(r => !known.has(r.id));
+
+    db.rounds.push(...fresh);
+    db.rounds.sort((a, b) => a.id - b.id);
+    save();
+    render();
+
+    const skipped = incoming.rounds.length - fresh.length;
+    toast(
+      fresh.length + " round(s) added" +
+      (skipped ? ", " + skipped + " already here." : ".")
+    );
+  } catch (err) {
+    toast("Could not read that file: " + err.message, true);
+  }
+}
+
+function toast(text, bad = false) {
+  const el = document.getElementById("toast");
+  el.textContent = text;
+  el.classList.toggle("is-bad", bad);
+  el.hidden = false;
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => { el.hidden = true; }, 5000);
+}
 
 /* ---- geolocation ---------------------------------------------- */
 
@@ -383,9 +473,7 @@ function haversineYards(a, b) {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h)) * M_TO_YARDS;
 }
 
-/* ============================================================
-   [2] CAPTURE — one tap, two jobs
-   ============================================================ */
+/* ---- capture: one tap, two jobs -------------------------------- */
 
 function capture(club) {
   const round = activeRound();
@@ -397,7 +485,7 @@ function capture(club) {
     lat: currentFix.latitude,
     lng: currentFix.longitude,
     accuracy: currentFix.accuracy,
-    club,                       // null when holing out
+    club,
     penaltyStrokes: 0,
     at: new Date().toISOString()
   });
@@ -414,8 +502,6 @@ function capture(club) {
   render();
 }
 
-/* Penalty captures nothing. It tags the shot already logged.
-   Cycles 0 -> 1 -> 2 -> 0, so a mis-tap costs two taps, not a round. */
 function cyclePenalty() {
   const round = activeRound();
   const shot = round && lastShot(round);
@@ -448,21 +534,14 @@ function undo() {
    [3] distanceFor — three kinds of truth
 
    measured : clean. average it, trust it.
+   floor    : penalised, played on from ahead. A LOWER BOUND on the
+              flight. Right-censored. Constrains the distribution;
+              never averaged, or the driver's mean walks into the pond.
+   unknown  : penalised, next mark is basically where you stood. You
+              replayed. The gap measures your walk back. Keep the
+              stroke, bin the distance.
 
-   floor    : penalised, and you played on from somewhere forward.
-              The gap is a LOWER BOUND on how far the ball flew —
-              you dropped short of where it finished. Statisticians
-              call this right-censored. It constrains the club's
-              distribution but must never be averaged as a clean
-              number, or your driver's mean walks into the pond.
-
-   unknown  : penalised, and your next mark is basically where you
-              already were. You replayed. The gap measures your
-              walk back, not your shot. Keep the stroke, bin the
-              distance.
-
-   The replay test is geometry, not a question. Do not ask the
-   golfer what the data already knows.
+   The replay test is geometry, not a question.
    ============================================================ */
 
 function distanceFor(shot, next) {
@@ -541,6 +620,15 @@ function endRound() {
   render();
 }
 
+function deleteRound(id) {
+  const round = db.rounds.find(r => r.id === id);
+  if (!round) return;
+  if (!confirm("Delete this round permanently? Export first if unsure.")) return;
+  db.rounds = db.rounds.filter(r => r.id !== id);
+  save();
+  render();
+}
+
 /* ---- ui -------------------------------------------------------- */
 
 function buildClubs() {
@@ -576,11 +664,45 @@ function refreshControls() {
   document.getElementById("holedBtn").disabled = !(ready && round && round.shots.length > 0);
 }
 
+function renderRounds() {
+  const list = document.getElementById("rounds");
+  list.innerHTML = "";
+  document.getElementById("roundsEmpty").hidden = db.rounds.length > 0;
+  document.getElementById("exportBtn").disabled = db.rounds.length === 0;
+
+  [...db.rounds].reverse().forEach(round => {
+    const li = document.createElement("li");
+
+    const date = document.createElement("span");
+    date.className = "date";
+    date.textContent = new Date(round.startedAt).toLocaleDateString(undefined, {
+      month: "short", day: "numeric"
+    });
+
+    const meta = document.createElement("span");
+    meta.className = "meta" + (round.source === "sim" ? " is-sim" : "");
+    meta.textContent =
+      (round.source === "sim" ? "sim \u00B7 " : "") +
+      round.shots.length + " shots \u00B7 " + strokeCount(round) + " strokes";
+
+    const del = document.createElement("button");
+    del.className = "del";
+    del.type = "button";
+    del.textContent = "\u00D7";
+    del.setAttribute("aria-label", "Delete round");
+    del.addEventListener("click", () => deleteRound(round.id));
+
+    li.append(date, meta, del);
+    list.append(li);
+  });
+}
+
 function render() {
   const round = activeRound();
   document.getElementById("startScreen").hidden = Boolean(round);
   document.getElementById("roundScreen").hidden = !round;
-  if (!round) return;
+
+  if (!round) { renderRounds(); return; }
 
   const tag = document.getElementById("sourceTag");
   tag.textContent = round.source === "sim" ? "SIMULATOR" : "REAL";
@@ -653,6 +775,13 @@ document.getElementById("penaltyBtn").addEventListener("click", cyclePenalty);
 document.getElementById("undoBtn").addEventListener("click", undo);
 document.getElementById("holedBtn").addEventListener("click", () => capture(null));
 document.getElementById("endBtn").addEventListener("click", endRound);
+document.getElementById("exportBtn").addEventListener("click", exportJson);
+
+document.getElementById("importInput").addEventListener("change", event => {
+  const file = event.target.files[0];
+  if (file) importJson(file);
+  event.target.value = "";   // let the same file be picked again
+});
 
 showIdle("Tap the club in your hand.");
 render();
