@@ -7,49 +7,63 @@
 
 <!--
   ============================================================
-  STEP 2 (v3): penalties.
+  STEP 2 (v4): penalties, done properly.
 
   Tapping a club means "I am at my ball with this in my hand."
   One tap. It closes the previous shot and opens the next.
 
-  A PENALTY BUTTON CAPTURES NO POSITION. It reaches back and
-  tags the shot you already logged — the one you just watched
-  go wrong. Then you walk to your drop and tap your club as
-  normal. Nothing else changes.
+  The PENALTY button captures no position. It tags the shot you
+  already logged. Tap it to cycle +1 -> +2 -> clear.
 
-  WHY WATER AND OB CANNOT SHARE A BUTTON
-  --------------------------------------
-  Water: you drop near where the ball crossed the margin. So the
-  gap from your ball to your drop is a LOWER BOUND on how far the
-  shot flew. Not "215 yards" — "at least 195 yards." That is
-  censored data. Real information, but it must never be averaged
-  as if it were a clean measurement.
+  WHY ONE BUTTON AND NOT TWO
+  --------------------------
+  The earlier version had separate Water and OB buttons, on the
+  theory that OB means replaying from the original spot. That is
+  the Rule — but most clubs use the 2019 local rule (E-5) giving
+  two-stroke lateral relief near where the ball went out, and
+  casual play often just drops at the loss point.
 
-  OB / lost: you replay from the ORIGINAL spot. Your next mark
-  lands within a few yards of the last one. Without a flag, the
-  app records your driver travelling four yards and quietly
-  poisons the club table forever.
+  So the hazard TYPE does not determine the geometry. The RELIEF
+  YOU TOOK does. And that is not a question worth asking, because
+  your next mark already answers it:
 
-  Same two taps either way. Different truths.
+    next mark is NEAR the penalised shot  -> you replayed
+                                          -> distance unknowable
+    next mark is FORWARD                  -> you dropped ahead
+                                          -> distance is a FLOOR
+
+  The only thing the app cannot infer is how many strokes the
+  relief cost. So that is the only thing it asks.
+
+  WHAT IS STORED VS WHAT IS DERIVED
+  ---------------------------------
+  Stored: raw positions, club, penaltyStrokes.
+  Derived: distance, and whether a shot was a replay.
+
+  "Replay" is a JUDGEMENT made with a 20-yard threshold. Do not
+  freeze a judgement into the data. Python gets to re-decide that
+  threshold later, on a laptop, with all the rounds in front of
+  it — and it can only do that if the phone kept its opinions out
+  of the file.
 
   READ THESE IN ORDER:
-    [1] the schema + migration   (data outlives code)
-    [2] capture                  (one tap, two jobs)
-    [3] distanceFor              (measured / floor / unknown)
+    [1] the schema + migrations   (data outlives code)
+    [2] capture                   (one tap, two jobs)
+    [3] distanceFor               (measured / floor / unknown)
   ============================================================
 -->
 
 <style>
   :root {
-    --paper:  #EDEFEC;
-    --ink:    #14170F;
-    --muted:  #757B72;
-    --rule:   #C9CDC5;
-    --mark:   #EE4B0A;
-    --good:   #2F6B37;
-    --poor:   #A8501A;
-    --water:  #2F5E8C;   /* wet balls read cool */
-    --sim:    #3A5A8C;
+    --paper:   #EDEFEC;
+    --ink:     #14170F;
+    --muted:   #757B72;
+    --rule:    #C9CDC5;
+    --mark:    #EE4B0A;
+    --good:    #2F6B37;
+    --poor:    #A8501A;
+    --penalty: #2F5E8C;
+    --sim:     #3A5A8C;
 
     --mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -116,8 +130,9 @@
   }
   .readout.is-fresh { background: var(--ink); color: var(--paper); }
   .readout.is-fresh .eyebrow { color: var(--rule); }
-  .readout.is-wet { background: var(--water); border-color: var(--water); color: var(--paper); }
-  .readout.is-wet .eyebrow { color: rgba(237,239,236,0.65); }
+  .readout.is-penal { background: var(--penalty); border-color: var(--penalty); color: var(--paper); }
+  .readout.is-penal .eyebrow { color: rgba(237,239,236,0.65); }
+  .readout.is-penal .readout-idle { color: rgba(237,239,236,0.85); }
 
   .readout-value {
     font-family: var(--mono); font-size: 2.5rem; font-weight: 600;
@@ -127,7 +142,6 @@
   .readout-value small { font-size: 0.9375rem; font-weight: 400; opacity: 0.6; margin-left: 0.4rem; }
   .readout-value .floor { font-size: 1.5rem; opacity: 0.7; margin-right: 0.2rem; }
   .readout-idle { font-family: var(--mono); font-size: 0.9375rem; color: var(--muted); margin: 0.25rem 0 0; }
-  .readout.is-wet .readout-idle { color: rgba(237,239,236,0.8); }
 
   /* ---- fix strip ---------------------------------------------- */
   .fix-strip {
@@ -154,17 +168,21 @@
   .club:disabled { opacity: 0.35; }
   .club.is-last { border: 2px solid var(--ink); }
 
-  /* ---- penalties: tag the shot you just hit ------------------- */
-  .penalties { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem; }
-  .penalties button {
-    padding: 0.9375rem 0.5rem;
+  /* ---- penalty ------------------------------------------------- */
+  #penaltyBtn {
+    display: block; width: 100%;
+    padding: 1rem;
     border: 1px solid var(--rule); border-radius: 2px;
     background: transparent; color: var(--muted);
-    font: 600 0.75rem/1 var(--sans); letter-spacing: 0.06em; text-transform: uppercase;
+    font: 600 0.8125rem/1 var(--sans);
+    letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 0.5rem;
   }
-  .penalties button:disabled { opacity: 0.3; }
-  #waterBtn[aria-pressed="true"] { background: var(--water); border-color: var(--water); color: var(--paper); }
-  #obBtn[aria-pressed="true"]    { background: var(--poor);  border-color: var(--poor);  color: var(--paper); }
+  #penaltyBtn:disabled { opacity: 0.3; }
+  #penaltyBtn[data-strokes="1"],
+  #penaltyBtn[data-strokes="2"] {
+    background: var(--penalty); border-color: var(--penalty); color: var(--paper);
+  }
 
   /* ---- secondary actions -------------------------------------- */
   .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1.75rem; }
@@ -188,9 +206,10 @@
   .log .n { color: var(--mark); font-weight: 600; font-size: 0.75rem; }
   .log .club-name { font-weight: 600; }
   .log .note { color: var(--muted); font-size: 0.75rem; }
+  .log .note.is-penal { color: var(--penalty); font-weight: 600; }
   .log .yds { font-weight: 600; font-variant-numeric: tabular-nums; }
   .log .pending { color: var(--muted); font-weight: 400; }
-  .log .floor { color: var(--water); }
+  .log .floor { color: var(--penalty); }
   .log .void { color: var(--poor); font-weight: 400; }
   .log li.is-holed .club-name { color: var(--muted); font-weight: 400; }
 
@@ -241,11 +260,8 @@
     <p class="eyebrow">Club in hand — tap to mark your ball</p>
     <div class="clubs" id="clubs"></div>
 
-    <p class="eyebrow">Went wrong? Tag the shot you just hit</p>
-    <div class="penalties">
-      <button id="waterBtn" aria-pressed="false" disabled>Water</button>
-      <button id="obBtn" aria-pressed="false" disabled>OB / lost</button>
-    </div>
+    <p class="eyebrow">Penalty — tags the shot you just hit</p>
+    <button id="penaltyBtn" data-strokes="0" disabled>Add penalty</button>
 
     <div class="actions">
       <button id="undoBtn" disabled>Undo last</button>
@@ -261,30 +277,38 @@
 "use strict";
 
 /* ============================================================
-   [1] THE SCHEMA — and the first migration
+   [1] THE SCHEMA — and its migrations
 
    round = { id, startedAt, endedAt, source: "real"|"sim", shots: [] }
    shot  = {
      lat, lng, accuracy, at,
-     club: "7i" | null,                    null = ball in the cup
-     outcome: "in_play" | "water" | "ob",
-     penaltyStrokes: 0 | 1
+     club: "7i" | null,        null = ball in the cup
+     penaltyStrokes: 0 | 1 | 2
    }
 
-   Distance is NOT stored. It is derived from the gap to the next
-   shot. Never store what you can compute; stored copies drift.
+   Note what is absent: no distance, no "was this a replay", no
+   hazard type. All three are derivable, and derived values must
+   never be stored — the moment you store one it can disagree with
+   the raw data, and then you have two truths.
 
-   Version 1 rounds have no outcome field. Rather than crash on
-   them, migrate() fills in the sensible default. This is what
-   schemaVersion was insurance for, and it is why you write it on
-   day one instead of the day you need it.
+   v1 -> v2 added outcome/penaltyStrokes.
+   v2 -> v3 removes outcome, because "water" vs "ob" turned out to
+   be the wrong distinction. Old data is not lost: any tagged shot
+   simply becomes a 1-stroke penalty, which it always was.
+
+   This is the second migration in about an hour. That is normal,
+   and it is why schemaVersion goes in on day one.
    ============================================================ */
 
 const STORAGE_KEY = "shotlog:v1";
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 // Your bag. Edit freely — nothing downstream cares what these strings are.
 const BAG = ["Dr","3w","5w","4h","5i","6i","7i","8i","9i","PW","GW","SW","LW","Putt","?"];
+
+// Below this, a "next shot" is really you standing back on the old spot.
+// A display heuristic only. Never written to storage.
+const REPLAY_THRESHOLD_YARDS = 20;
 
 const EARTH_RADIUS_M = 6371000;
 const M_TO_YARDS = 1.09361;
@@ -295,14 +319,18 @@ let currentFix = null;
 function migrate(data) {
   if (data.schemaVersion === SCHEMA_VERSION) return data;
 
-  if (!data.schemaVersion || data.schemaVersion < 2) {
-    data.rounds.forEach(round =>
-      round.shots.forEach(shot => {
-        shot.outcome ??= "in_play";
-        shot.penaltyStrokes ??= 0;
-      })
-    );
-  }
+  data.rounds.forEach(round =>
+    round.shots.forEach(shot => {
+      // v1 had neither field.
+      shot.penaltyStrokes ??= 0;
+
+      // v2 stored a hazard type. Fold it down to what it really meant.
+      if (shot.outcome) {
+        if (shot.outcome !== "in_play") shot.penaltyStrokes ||= 1;
+        delete shot.outcome;
+      }
+    })
+  );
 
   data.schemaVersion = SCHEMA_VERSION;
   return data;
@@ -357,10 +385,6 @@ function haversineYards(a, b) {
 
 /* ============================================================
    [2] CAPTURE — one tap, two jobs
-
-   Tapping a club records where you stand. That single act closes
-   the previous shot and opens the next. No confirmation step,
-   by design — which is exactly why undo() exists.
    ============================================================ */
 
 function capture(club) {
@@ -374,7 +398,6 @@ function capture(club) {
     lng: currentFix.longitude,
     accuracy: currentFix.accuracy,
     club,                       // null when holing out
-    outcome: "in_play",
     penaltyStrokes: 0,
     at: new Date().toISOString()
   });
@@ -382,7 +405,6 @@ function capture(club) {
 
   if (navigator.vibrate) navigator.vibrate(25);
 
-  // The payoff: the shot you just hit now resolves into a number.
   if (prev && prev.club !== null) {
     showResult(prev, distanceFor(prev, lastShot(round)));
   } else {
@@ -392,24 +414,22 @@ function capture(club) {
   render();
 }
 
-/* Penalty captures NOTHING. It tags the shot already logged.
-   Tap again to clear it — mis-taps should cost one tap, not a round. */
-function tagPenalty(kind) {
+/* Penalty captures nothing. It tags the shot already logged.
+   Cycles 0 -> 1 -> 2 -> 0, so a mis-tap costs two taps, not a round. */
+function cyclePenalty() {
   const round = activeRound();
   const shot = round && lastShot(round);
   if (!shot || shot.club === null) return;
 
-  const clearing = shot.outcome === kind;
-  shot.outcome = clearing ? "in_play" : kind;
-  shot.penaltyStrokes = clearing ? 0 : 1;
+  shot.penaltyStrokes = (shot.penaltyStrokes + 1) % 3;
   save();
 
-  if (navigator.vibrate) navigator.vibrate(clearing ? 15 : [20, 40, 20]);
+  if (navigator.vibrate) navigator.vibrate(shot.penaltyStrokes ? [20, 40, 20] : 15);
 
   showIdle(
-    clearing ? "Cleared. " + shot.club + " back in play."
-    : kind === "water" ? shot.club + " found water. Drop, then tap your club."
-    : shot.club + " lost. Replay from here — tap your club again."
+    shot.penaltyStrokes === 0 ? "Cleared. " + shot.club + " back in play."
+    : shot.penaltyStrokes === 1 ? shot.club + " +1. Play on, then tap your club."
+    : shot.club + " +2 (lateral relief)."
   );
 
   render();
@@ -428,22 +448,32 @@ function undo() {
    [3] distanceFor — three kinds of truth
 
    measured : clean. average it, trust it.
-   floor    : ball went in the water. The gap to your drop is a
-              LOWER BOUND on how far it flew. Statisticians call
-              this right-censored. It still constrains the club's
-              distribution — it just cannot be averaged like a
-              clean number.
-   unknown  : OB or lost. You replayed from the original spot, so
-              the gap measures your walk back, not your shot.
-              Keep the stroke. Throw out the distance.
+
+   floor    : penalised, and you played on from somewhere forward.
+              The gap is a LOWER BOUND on how far the ball flew —
+              you dropped short of where it finished. Statisticians
+              call this right-censored. It constrains the club's
+              distribution but must never be averaged as a clean
+              number, or your driver's mean walks into the pond.
+
+   unknown  : penalised, and your next mark is basically where you
+              already were. You replayed. The gap measures your
+              walk back, not your shot. Keep the stroke, bin the
+              distance.
+
+   The replay test is geometry, not a question. Do not ask the
+   golfer what the data already knows.
    ============================================================ */
 
 function distanceFor(shot, next) {
   if (shot.club === null) return { kind: "none" };
-  if (!next)               return { kind: "pending" };
-  if (shot.outcome === "ob")    return { kind: "unknown" };
-  if (shot.outcome === "water") return { kind: "floor", yards: haversineYards(shot, next) };
-  return { kind: "measured", yards: haversineYards(shot, next) };
+  if (!next)              return { kind: "pending" };
+
+  const yards = haversineYards(shot, next);
+
+  if (shot.penaltyStrokes === 0) return { kind: "measured", yards };
+  if (yards < REPLAY_THRESHOLD_YARDS) return { kind: "unknown" };
+  return { kind: "floor", yards };
 }
 
 /* ---- readout -------------------------------------------------- */
@@ -458,21 +488,23 @@ function showResult(shot, dist) {
   clearTimeout(showResult.timer);
 
   if (dist.kind === "unknown") {
-    label.textContent = shot.club;
+    label.textContent = shot.club + " — replayed";
     value.hidden = true;
     idle.hidden = false;
-    idle.textContent = "Replayed. No distance recorded.";
+    idle.textContent = "Stroke counted. No distance.";
+    box.classList.add("is-penal");
+    showResult.timer = setTimeout(() => { box.className = "readout"; }, 2800);
     return;
   }
 
-  label.textContent = shot.club + (dist.kind === "floor" ? " — into water" : "");
+  label.textContent = shot.club + (dist.kind === "floor" ? " — penalty" : "");
   idle.hidden = true;
   value.hidden = false;
   value.innerHTML =
     (dist.kind === "floor" ? '<span class="floor">\u2265</span>' : "") +
     Math.round(dist.yards) + "<small>yards</small>";
 
-  box.classList.add(dist.kind === "floor" ? "is-wet" : "is-fresh");
+  box.classList.add(dist.kind === "floor" ? "is-penal" : "is-fresh");
   showResult.timer = setTimeout(() => { box.className = "readout"; }, 2800);
 }
 
@@ -523,11 +555,8 @@ function buildClubs() {
   });
 }
 
-function strokeCount(round) {
-  return round.shots.reduce(
-    (n, s) => n + (s.club === null ? 0 : 1) + s.penaltyStrokes, 0
-  );
-}
+const strokeCount = round =>
+  round.shots.reduce((n, s) => n + (s.club === null ? 0 : 1) + s.penaltyStrokes, 0);
 
 function refreshControls() {
   const round = activeRound();
@@ -537,12 +566,11 @@ function refreshControls() {
 
   document.querySelectorAll(".club").forEach(b => { b.disabled = !ready; });
 
-  const water = document.getElementById("waterBtn");
-  const ob    = document.getElementById("obBtn");
-  water.disabled = !taggable;
-  ob.disabled    = !taggable;
-  water.setAttribute("aria-pressed", String(taggable && shot.outcome === "water"));
-  ob.setAttribute("aria-pressed",    String(taggable && shot.outcome === "ob"));
+  const pen = document.getElementById("penaltyBtn");
+  pen.disabled = !taggable;
+  const n = taggable ? shot.penaltyStrokes : 0;
+  pen.dataset.strokes = String(n);
+  pen.textContent = n === 0 ? "Add penalty" : "Penalty +" + n + " — tap to change";
 
   document.getElementById("undoBtn").disabled  = !(round && round.shots.length > 0);
   document.getElementById("holedBtn").disabled = !(ready && round && round.shots.length > 0);
@@ -583,10 +611,9 @@ function render() {
     club.textContent = shot.club ?? "in";
 
     const note = document.createElement("span");
-    note.className = "note";
-    note.textContent =
-      shot.outcome === "water" ? "water +1"
-      : shot.outcome === "ob"  ? "lost +1"
+    note.className = "note" + (shot.penaltyStrokes ? " is-penal" : "");
+    note.textContent = shot.penaltyStrokes
+      ? "+" + shot.penaltyStrokes + " penalty"
       : "\u00B1" + Math.round(shot.accuracy) + "m";
 
     const yds = document.createElement("span");
@@ -598,7 +625,7 @@ function render() {
       yds.textContent = "\u2265 " + Math.round(dist.yards) + " yds";
     } else if (dist.kind === "unknown") {
       yds.className = "yds void";
-      yds.textContent = "no dist";
+      yds.textContent = "replayed";
     } else if (dist.kind === "pending") {
       yds.className = "yds pending";
       yds.textContent = "in play";
@@ -622,8 +649,7 @@ buildClubs();
 document.querySelectorAll(".start-choice").forEach(btn =>
   btn.addEventListener("click", () => startRound(btn.dataset.source))
 );
-document.getElementById("waterBtn").addEventListener("click", () => tagPenalty("water"));
-document.getElementById("obBtn").addEventListener("click",    () => tagPenalty("ob"));
+document.getElementById("penaltyBtn").addEventListener("click", cyclePenalty);
 document.getElementById("undoBtn").addEventListener("click", undo);
 document.getElementById("holedBtn").addEventListener("click", () => capture(null));
 document.getElementById("endBtn").addEventListener("click", endRound);
