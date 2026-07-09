@@ -7,31 +7,35 @@
 
 <!--
   ============================================================
-  STEP 2: marks stop evaporating.
+  STEP 2 (v3): penalties.
 
-  New since step 1:
-    - a ROUND is now a real thing, tagged real or simulator
-    - you pick the club before you mark
-    - everything saves to localStorage and survives a refresh
+  Tapping a club means "I am at my ball with this in my hand."
+  One tap. It closes the previous shot and opens the next.
 
-  THE ONE MODELLING IDEA THAT MATTERS
-  -----------------------------------
-  A mark is a position. A SHOT is a position plus the club you
-  hit FROM there. So the club you tag belongs to the ball you are
-  standing over, not the one you just hit.
+  A PENALTY BUTTON CAPTURES NO POSITION. It reaches back and
+  tags the shot you already logged — the one you just watched
+  go wrong. Then you walk to your drop and tap your club as
+  normal. Nothing else changes.
 
-  Which means a shot's distance is the gap to the NEXT mark, and
-  is unknowable until you take it. The last mark of a hole (the
-  ball in the cup) has no club at all.
+  WHY WATER AND OB CANNOT SHARE A BUTTON
+  --------------------------------------
+  Water: you drop near where the ball crossed the margin. So the
+  gap from your ball to your drop is a LOWER BOUND on how far the
+  shot flew. Not "215 yards" — "at least 195 yards." That is
+  censored data. Real information, but it must never be averaged
+  as if it were a clean measurement.
 
-  Get this backwards and every distance in your table is
-  attributed to the wrong club. It is the single easiest way to
-  quietly ruin six weeks of data.
+  OB / lost: you replay from the ORIGINAL spot. Your next mark
+  lands within a few yards of the last one. Without a flag, the
+  app records your driver travelling four yards and quietly
+  poisons the club table forever.
+
+  Same two taps either way. Different truths.
 
   READ THESE IN ORDER:
-    [1] the schema        (the shape of the data. hardest to change later)
-    [2] save / load       (localStorage holds strings, nothing else)
-    [3] the shot list     (where club meets distance)
+    [1] the schema + migration   (data outlives code)
+    [2] capture                  (one tap, two jobs)
+    [3] distanceFor              (measured / floor / unknown)
   ============================================================
 -->
 
@@ -44,7 +48,8 @@
     --mark:   #EE4B0A;
     --good:   #2F6B37;
     --poor:   #A8501A;
-    --sim:    #3A5A8C;   /* simulator rounds read cool, real rounds read warm */
+    --water:  #2F5E8C;   /* wet balls read cool */
+    --sim:    #3A5A8C;
 
     --mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -64,162 +69,139 @@
 
   .eyebrow {
     font: 600 0.6875rem/1 var(--sans);
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--muted);
-    margin: 0 0 0.5rem;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 0.5rem;
   }
 
   button { font-family: var(--sans); cursor: pointer; }
   button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  [hidden] { display: none !important; }
 
   /* ---- round header ------------------------------------------ */
   .round-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    border-top: 2px solid var(--ink);
-    border-bottom: 1px solid var(--rule);
-    padding: 0.625rem 0;
-    margin-bottom: 1.25rem;
-    font-family: var(--mono);
-    font-size: 0.8125rem;
+    display: flex; justify-content: space-between; align-items: center;
+    border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule);
+    padding: 0.625rem 0; margin-bottom: 1rem;
   }
+  .round-bar-left { display: flex; align-items: center; gap: 0.625rem; }
   .tag {
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-size: 0.6875rem;
-    padding: 0.2rem 0.4rem;
-    color: var(--paper);
-    background: var(--mark);
+    font: 600 0.6875rem/1 var(--sans);
+    letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 0.3rem 0.45rem; color: var(--paper); background: var(--mark);
   }
   .tag.is-sim { background: var(--sim); }
-
+  .strokes { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
   .link-btn {
-    background: none;
-    border: none;
-    padding: 0;
-    color: var(--muted);
-    font-size: 0.75rem;
-    text-decoration: underline;
+    background: none; border: none; padding: 0;
+    color: var(--muted); font-size: 0.75rem; text-decoration: underline;
   }
 
   /* ---- start screen ------------------------------------------- */
-  .start h1 {
-    font-size: 1.5rem;
-    letter-spacing: -0.02em;
-    margin: 0.25rem 0 0.5rem;
-  }
-  .start p { color: var(--muted); font-size: 0.9375rem; margin: 0 0 1.5rem; }
+  .start h1 { font-size: 1.5rem; letter-spacing: -0.02em; margin: 0.25rem 0 0.5rem; }
+  .start > p { color: var(--muted); font-size: 0.9375rem; margin: 0 0 1.5rem; }
   .start-choice {
-    display: block;
-    width: 100%;
-    padding: 1.25rem;
-    margin-bottom: 0.75rem;
-    border: 2px solid var(--ink);
-    border-radius: 2px;
-    background: var(--paper);
-    text-align: left;
+    display: block; width: 100%; padding: 1.25rem; margin-bottom: 0.75rem;
+    border: 2px solid var(--ink); border-radius: 2px;
+    background: var(--paper); text-align: left;
   }
   .start-choice strong { display: block; font-size: 1.0625rem; }
   .start-choice span { color: var(--muted); font-size: 0.8125rem; }
   .start-choice:active { background: var(--rule); }
 
-  /* ---- live fix ----------------------------------------------- */
-  .coords {
-    font-family: var(--mono);
-    font-size: clamp(1.375rem, 6.5vw, 2rem);
-    font-weight: 500;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-    margin: 0;
-    font-variant-numeric: tabular-nums;
+  /* ---- readout ------------------------------------------------ */
+  .readout {
+    border: 2px solid var(--ink); padding: 0.875rem 1rem;
+    margin-bottom: 1.25rem; min-height: 5.25rem;
+    display: flex; flex-direction: column; justify-content: center;
   }
-  .coords span { display: block; }
+  .readout.is-fresh { background: var(--ink); color: var(--paper); }
+  .readout.is-fresh .eyebrow { color: var(--rule); }
+  .readout.is-wet { background: var(--water); border-color: var(--water); color: var(--paper); }
+  .readout.is-wet .eyebrow { color: rgba(237,239,236,0.65); }
 
-  .accuracy {
-    display: flex; align-items: center; gap: 0.5rem;
-    margin: 0.625rem 0 1.25rem;
-    font-family: var(--mono); font-size: 0.8125rem;
+  .readout-value {
+    font-family: var(--mono); font-size: 2.5rem; font-weight: 600;
+    line-height: 1; letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums; margin: 0.25rem 0 0;
   }
-  .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--muted); flex: none; }
+  .readout-value small { font-size: 0.9375rem; font-weight: 400; opacity: 0.6; margin-left: 0.4rem; }
+  .readout-value .floor { font-size: 1.5rem; opacity: 0.7; margin-right: 0.2rem; }
+  .readout-idle { font-family: var(--mono); font-size: 0.9375rem; color: var(--muted); margin: 0.25rem 0 0; }
+  .readout.is-wet .readout-idle { color: rgba(237,239,236,0.8); }
+
+  /* ---- fix strip ---------------------------------------------- */
+  .fix-strip {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-family: var(--mono); font-size: 0.75rem; color: var(--muted);
+    margin-bottom: 1.25rem;
+  }
+  .dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--muted); flex: none; }
   .dot.is-good { background: var(--good); }
   .dot.is-poor { background: var(--poor); }
 
-  /* ---- club picker -------------------------------------------- */
-  /* thumb-sized targets. you are wearing a glove and it is windy. */
+  /* ---- club grid ---------------------------------------------- */
   .clubs {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr));
-    gap: 0.5rem;
-    margin-bottom: 1.25rem;
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
+    gap: 0.5rem; margin-bottom: 1rem;
   }
   .club {
-    padding: 0.875rem 0.25rem;
-    border: 1px solid var(--rule);
-    border-radius: 2px;
-    background: var(--paper);
-    font-family: var(--mono);
-    font-size: 0.9375rem;
-    font-weight: 500;
-    color: var(--ink);
+    padding: 1.25rem 0.25rem;
+    border: 1px solid var(--rule); border-radius: 2px;
+    background: var(--paper); color: var(--ink);
+    font-family: var(--mono); font-size: 1.0625rem; font-weight: 600;
   }
-  .club[aria-pressed="true"] {
-    background: var(--ink);
-    color: var(--paper);
-    border-color: var(--ink);
-  }
+  .club:active { background: var(--mark); border-color: var(--mark); color: var(--paper); }
+  .club:disabled { opacity: 0.35; }
+  .club.is-last { border: 2px solid var(--ink); }
 
-  /* ---- capture ------------------------------------------------ */
-  .capture {
-    display: block; width: 100%;
-    padding: 1.5rem;
-    border: none; border-radius: 2px;
-    background: var(--mark);
-    color: var(--paper);
-    font: 700 1.125rem/1 var(--sans);
-    letter-spacing: 0.08em; text-transform: uppercase;
-    margin-bottom: 0.5rem;
+  /* ---- penalties: tag the shot you just hit ------------------- */
+  .penalties { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .penalties button {
+    padding: 0.9375rem 0.5rem;
+    border: 1px solid var(--rule); border-radius: 2px;
+    background: transparent; color: var(--muted);
+    font: 600 0.75rem/1 var(--sans); letter-spacing: 0.06em; text-transform: uppercase;
   }
-  .capture:active { transform: translateY(1px); }
-  .capture:disabled { background: var(--rule); color: var(--muted); }
+  .penalties button:disabled { opacity: 0.3; }
+  #waterBtn[aria-pressed="true"] { background: var(--water); border-color: var(--water); color: var(--paper); }
+  #obBtn[aria-pressed="true"]    { background: var(--poor);  border-color: var(--poor);  color: var(--paper); }
 
-  .holed {
-    display: block; width: 100%;
+  /* ---- secondary actions -------------------------------------- */
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1.75rem; }
+  .actions button {
     padding: 0.875rem;
     border: 1px solid var(--rule); border-radius: 2px;
     background: transparent; color: var(--muted);
-    font-size: 0.8125rem; letter-spacing: 0.06em; text-transform: uppercase;
-    margin-bottom: 1.75rem;
+    font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase;
   }
-  .holed:disabled { opacity: 0.4; }
+  .actions button:disabled { opacity: 0.3; }
+  #undoBtn:not(:disabled) { color: var(--poor); border-color: var(--poor); }
 
   /* ---- shot log ------------------------------------------------ */
   .log { list-style: none; margin: 0; padding: 0; }
   .log li {
-    display: grid;
-    grid-template-columns: 2rem 3.5rem 1fr auto;
-    gap: 0.625rem;
-    align-items: baseline;
-    padding: 0.6875rem 0;
-    border-bottom: 1px solid var(--rule);
-    font-family: var(--mono);
-    font-size: 0.875rem;
+    display: grid; grid-template-columns: 2rem 3.5rem 1fr auto;
+    gap: 0.625rem; align-items: baseline;
+    padding: 0.6875rem 0; border-bottom: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 0.875rem;
   }
   .log .n { color: var(--mark); font-weight: 600; font-size: 0.75rem; }
   .log .club-name { font-weight: 600; }
+  .log .note { color: var(--muted); font-size: 0.75rem; }
   .log .yds { font-weight: 600; font-variant-numeric: tabular-nums; }
   .log .pending { color: var(--muted); font-weight: 400; }
-  .log li.is-holed .club-name { color: var(--muted); }
+  .log .floor { color: var(--water); }
+  .log .void { color: var(--poor); font-weight: 400; }
+  .log li.is-holed .club-name { color: var(--muted); font-weight: 400; }
 
   .empty { color: var(--muted); font-size: 0.875rem; padding: 1rem 0; }
-  [hidden] { display: none !important; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
 </head>
 <body>
 
-  <!-- START SCREEN -->
+  <!-- START -->
   <section class="start" id="startScreen" hidden>
     <p class="eyebrow">New round</p>
     <h1>Where are you playing?</h1>
@@ -235,65 +217,71 @@
     </button>
   </section>
 
-  <!-- ROUND SCREEN -->
+  <!-- ROUND -->
   <section id="roundScreen" hidden>
     <div class="round-bar">
-      <span class="tag" id="sourceTag">REAL</span>
+      <span class="round-bar-left">
+        <span class="tag" id="sourceTag">REAL</span>
+        <span class="strokes" id="strokes">0 strokes</span>
+      </span>
       <button class="link-btn" id="endBtn">End round</button>
     </div>
 
-    <p class="eyebrow">Live fix</p>
-    <p class="coords">
-      <span id="lat">—</span>
-      <span id="lng">—</span>
-    </p>
-    <p class="accuracy">
+    <div class="readout" id="readout">
+      <p class="eyebrow" id="readoutLabel">Last shot</p>
+      <p class="readout-idle" id="readoutIdle">Tap the club in your hand.</p>
+      <p class="readout-value" id="readoutValue" hidden></p>
+    </div>
+
+    <p class="fix-strip">
       <span class="dot" id="dot"></span>
       <span id="acc">waiting for satellites</span>
     </p>
 
-    <p class="eyebrow">Club in hand</p>
+    <p class="eyebrow">Club in hand — tap to mark your ball</p>
     <div class="clubs" id="clubs"></div>
 
-    <button class="capture" id="markBtn" disabled>Mark ball</button>
-    <button class="holed" id="holedBtn" disabled>Holed out — end hole</button>
+    <p class="eyebrow">Went wrong? Tag the shot you just hit</p>
+    <div class="penalties">
+      <button id="waterBtn" aria-pressed="false" disabled>Water</button>
+      <button id="obBtn" aria-pressed="false" disabled>OB / lost</button>
+    </div>
+
+    <div class="actions">
+      <button id="undoBtn" disabled>Undo last</button>
+      <button id="holedBtn" disabled>Holed out</button>
+    </div>
 
     <p class="eyebrow">This round</p>
     <ul class="log" id="log"></ul>
-    <p class="empty" id="empty">No shots yet. Stand at your ball, pick a club, mark it.</p>
+    <p class="empty" id="empty">No shots yet. Stand at your ball and tap your club.</p>
   </section>
 
 <script>
 "use strict";
 
 /* ============================================================
-   [1] THE SCHEMA
+   [1] THE SCHEMA — and the first migration
 
-   Write this down deliberately. Code is easy to change. Data is
-   not — once six rounds are stored in the old shape, every future
-   version has to keep reading it.
-
-   schemaVersion is cheap insurance. When you inevitably change
-   the shape, you can detect old data and migrate it rather than
-   crash on it.
-
-   round = {
-     id, startedAt, endedAt, source: "real" | "sim",
-     shots: [ shot, ... ]
-   }
-
-   shot = {
+   round = { id, startedAt, endedAt, source: "real"|"sim", shots: [] }
+   shot  = {
      lat, lng, accuracy, at,
-     club: "7i" | null    <- null means "ball in the cup", no shot hit
+     club: "7i" | null,                    null = ball in the cup
+     outcome: "in_play" | "water" | "ob",
+     penaltyStrokes: 0 | 1
    }
 
-   Notice what is NOT stored: distance. It is derived from the gap
-   to the next shot. Never store what you can compute — stored
-   copies drift out of sync with the truth.
+   Distance is NOT stored. It is derived from the gap to the next
+   shot. Never store what you can compute; stored copies drift.
+
+   Version 1 rounds have no outcome field. Rather than crash on
+   them, migrate() fills in the sensible default. This is what
+   schemaVersion was insurance for, and it is why you write it on
+   day one instead of the day you need it.
    ============================================================ */
 
 const STORAGE_KEY = "shotlog:v1";
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 // Your bag. Edit freely — nothing downstream cares what these strings are.
 const BAG = ["Dr","3w","5w","4h","5i","6i","7i","8i","9i","PW","GW","SW","LW","Putt","?"];
@@ -301,73 +289,61 @@ const BAG = ["Dr","3w","5w","4h","5i","6i","7i","8i","9i","PW","GW","SW","LW","P
 const EARTH_RADIUS_M = 6371000;
 const M_TO_YARDS = 1.09361;
 
-let db = null;          // the whole saved world
-let currentFix = null;  // latest GPS reading, not yet marked
-let selectedClub = null;
+let db = null;
+let currentFix = null;
 
-/* ============================================================
-   [2] SAVE AND LOAD
+function migrate(data) {
+  if (data.schemaVersion === SCHEMA_VERSION) return data;
 
-   localStorage stores STRINGS. Nothing else. So every save is a
-   JSON.stringify and every load is a JSON.parse.
+  if (!data.schemaVersion || data.schemaVersion < 2) {
+    data.rounds.forEach(round =>
+      round.shots.forEach(shot => {
+        shot.outcome ??= "in_play";
+        shot.penaltyStrokes ??= 0;
+      })
+    );
+  }
 
-   It is per-origin and roughly 5MB. A round of golf is a few KB,
-   so you will never come close.
+  data.schemaVersion = SCHEMA_VERSION;
+  return data;
+}
 
-   The honest caveat: this is the browser's storage, not yours.
-   Clearing site data wipes it. Step 5 (export to JSON) is the
-   safety net. Until then, do not clear your browsing data.
-   ============================================================ */
+/* ---- storage -------------------------------------------------- */
 
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return { schemaVersion: SCHEMA_VERSION, rounds: [] };
-
   try {
-    const parsed = JSON.parse(raw);
-    // A future you will thank a present you for this branch.
-    if (parsed.schemaVersion !== SCHEMA_VERSION) {
-      console.warn("Old schema found. Migration would go here.");
-    }
-    return parsed;
+    return migrate(JSON.parse(raw));
   } catch (err) {
     console.error("Corrupt storage, starting fresh:", err);
     return { schemaVersion: SCHEMA_VERSION, rounds: [] };
   }
 }
 
-function save() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-}
+const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+const activeRound = () => db.rounds.find(r => !r.endedAt) || null;
+const lastShot = round => round.shots[round.shots.length - 1] ?? null;
 
-function activeRound() {
-  return db.rounds.find(r => !r.endedAt) || null;
-}
-
-/* ---- geolocation (unchanged from step 1) --------------------- */
+/* ---- geolocation ---------------------------------------------- */
 
 navigator.geolocation.watchPosition(onFix, onFixError, {
-  enableHighAccuracy: true,
-  maximumAge: 0,
-  timeout: 15000
+  enableHighAccuracy: true, maximumAge: 0, timeout: 15000
 });
 
 function onFix(position) {
   currentFix = position.coords;
-  document.getElementById("lat").textContent = currentFix.latitude.toFixed(6);
-  document.getElementById("lng").textContent = currentFix.longitude.toFixed(6);
-
   const m = Math.round(currentFix.accuracy);
   document.getElementById("acc").textContent = "\u00B1" + m + " m";
   document.getElementById("dot").className =
     "dot " + (m <= 10 ? "is-good" : m <= 20 ? "" : "is-poor");
-
-  refreshButtons();
+  refreshControls();
 }
 
 function onFixError(err) {
   document.getElementById("acc").textContent = "No fix — " + err.message;
   document.getElementById("dot").className = "dot is-poor";
+  refreshControls();
 }
 
 function haversineYards(a, b) {
@@ -379,81 +355,148 @@ function haversineYards(a, b) {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h)) * M_TO_YARDS;
 }
 
-/* ---- club picker --------------------------------------------- */
+/* ============================================================
+   [2] CAPTURE — one tap, two jobs
 
-function buildClubs() {
-  const wrap = document.getElementById("clubs");
-  BAG.forEach(name => {
-    const b = document.createElement("button");
-    b.className = "club";
-    b.type = "button";
-    b.textContent = name;
-    b.setAttribute("aria-pressed", "false");
-    b.addEventListener("click", () => {
-      selectedClub = (selectedClub === name) ? null : name;  // tap again to clear
-      document.querySelectorAll(".club").forEach(el =>
-        el.setAttribute("aria-pressed", String(el.textContent === selectedClub))
-      );
-      refreshButtons();
-    });
-    wrap.append(b);
-  });
-}
+   Tapping a club records where you stand. That single act closes
+   the previous shot and opens the next. No confirmation step,
+   by design — which is exactly why undo() exists.
+   ============================================================ */
 
-function refreshButtons() {
-  const round = activeRound();
-  const ready = Boolean(currentFix && round);
-  document.getElementById("markBtn").disabled = !(ready && selectedClub);
-  document.getElementById("holedBtn").disabled = !(ready && round.shots.length > 0);
-}
-
-/* ---- actions -------------------------------------------------- */
-
-function markBall() {
-  const round = activeRound();
-  if (!round || !currentFix || !selectedClub) return;
-
-  round.shots.push({
-    lat: currentFix.latitude,
-    lng: currentFix.longitude,
-    accuracy: currentFix.accuracy,
-    club: selectedClub,
-    at: new Date().toISOString()
-  });
-
-  save();
-  selectedClub = null;
-  document.querySelectorAll(".club").forEach(el => el.setAttribute("aria-pressed", "false"));
-  render();
-}
-
-// The ball is in the cup. This is a position with no club — it closes
-// out the previous shot's distance and hits nothing itself.
-function holeOut() {
+function capture(club) {
   const round = activeRound();
   if (!round || !currentFix) return;
 
+  const prev = lastShot(round);
+
   round.shots.push({
     lat: currentFix.latitude,
     lng: currentFix.longitude,
     accuracy: currentFix.accuracy,
-    club: null,
+    club,                       // null when holing out
+    outcome: "in_play",
+    penaltyStrokes: 0,
     at: new Date().toISOString()
   });
-
   save();
+
+  if (navigator.vibrate) navigator.vibrate(25);
+
+  // The payoff: the shot you just hit now resolves into a number.
+  if (prev && prev.club !== null) {
+    showResult(prev, distanceFor(prev, lastShot(round)));
+  } else {
+    showIdle(club === null ? "Hole complete." : "Tracking " + club + "\u2026");
+  }
+
   render();
 }
+
+/* Penalty captures NOTHING. It tags the shot already logged.
+   Tap again to clear it — mis-taps should cost one tap, not a round. */
+function tagPenalty(kind) {
+  const round = activeRound();
+  const shot = round && lastShot(round);
+  if (!shot || shot.club === null) return;
+
+  const clearing = shot.outcome === kind;
+  shot.outcome = clearing ? "in_play" : kind;
+  shot.penaltyStrokes = clearing ? 0 : 1;
+  save();
+
+  if (navigator.vibrate) navigator.vibrate(clearing ? 15 : [20, 40, 20]);
+
+  showIdle(
+    clearing ? "Cleared. " + shot.club + " back in play."
+    : kind === "water" ? shot.club + " found water. Drop, then tap your club."
+    : shot.club + " lost. Replay from here — tap your club again."
+  );
+
+  render();
+}
+
+function undo() {
+  const round = activeRound();
+  if (!round || round.shots.length === 0) return;
+  const dropped = round.shots.pop();
+  save();
+  showIdle("Removed " + (dropped.club ?? "hole-out") + ".");
+  render();
+}
+
+/* ============================================================
+   [3] distanceFor — three kinds of truth
+
+   measured : clean. average it, trust it.
+   floor    : ball went in the water. The gap to your drop is a
+              LOWER BOUND on how far it flew. Statisticians call
+              this right-censored. It still constrains the club's
+              distribution — it just cannot be averaged like a
+              clean number.
+   unknown  : OB or lost. You replayed from the original spot, so
+              the gap measures your walk back, not your shot.
+              Keep the stroke. Throw out the distance.
+   ============================================================ */
+
+function distanceFor(shot, next) {
+  if (shot.club === null) return { kind: "none" };
+  if (!next)               return { kind: "pending" };
+  if (shot.outcome === "ob")    return { kind: "unknown" };
+  if (shot.outcome === "water") return { kind: "floor", yards: haversineYards(shot, next) };
+  return { kind: "measured", yards: haversineYards(shot, next) };
+}
+
+/* ---- readout -------------------------------------------------- */
+
+function showResult(shot, dist) {
+  const box   = document.getElementById("readout");
+  const label = document.getElementById("readoutLabel");
+  const value = document.getElementById("readoutValue");
+  const idle  = document.getElementById("readoutIdle");
+
+  box.className = "readout";
+  clearTimeout(showResult.timer);
+
+  if (dist.kind === "unknown") {
+    label.textContent = shot.club;
+    value.hidden = true;
+    idle.hidden = false;
+    idle.textContent = "Replayed. No distance recorded.";
+    return;
+  }
+
+  label.textContent = shot.club + (dist.kind === "floor" ? " — into water" : "");
+  idle.hidden = true;
+  value.hidden = false;
+  value.innerHTML =
+    (dist.kind === "floor" ? '<span class="floor">\u2265</span>' : "") +
+    Math.round(dist.yards) + "<small>yards</small>";
+
+  box.classList.add(dist.kind === "floor" ? "is-wet" : "is-fresh");
+  showResult.timer = setTimeout(() => { box.className = "readout"; }, 2800);
+}
+
+function showIdle(text) {
+  document.getElementById("readoutLabel").textContent = "Last shot";
+  document.getElementById("readoutValue").hidden = true;
+  const idle = document.getElementById("readoutIdle");
+  idle.hidden = false;
+  idle.textContent = text;
+  document.getElementById("readout").className = "readout";
+}
+
+/* ---- rounds ---------------------------------------------------- */
 
 function startRound(source) {
   db.rounds.push({
     id: Date.now(),
     startedAt: new Date().toISOString(),
     endedAt: null,
-    source: source,
+    source,
     shots: []
   });
   save();
+  showIdle("Tap the club in your hand.");
   render();
 }
 
@@ -466,19 +509,47 @@ function endRound() {
   render();
 }
 
-/* ============================================================
-   [3] THE SHOT LIST — where club meets distance
+/* ---- ui -------------------------------------------------------- */
 
-   Shot i's distance is the gap from shot i to shot i+1.
-   The final shot has no next mark, so it has no distance yet.
-   That "pending" row is not a bug. It is the ball you are about
-   to hit, and the app cannot know how far it goes until you walk
-   to it. Golf, faithfully modelled.
-   ============================================================ */
+function buildClubs() {
+  const wrap = document.getElementById("clubs");
+  BAG.forEach(name => {
+    const b = document.createElement("button");
+    b.className = "club";
+    b.type = "button";
+    b.textContent = name;
+    b.addEventListener("click", () => capture(name));
+    wrap.append(b);
+  });
+}
+
+function strokeCount(round) {
+  return round.shots.reduce(
+    (n, s) => n + (s.club === null ? 0 : 1) + s.penaltyStrokes, 0
+  );
+}
+
+function refreshControls() {
+  const round = activeRound();
+  const ready = Boolean(currentFix && round);
+  const shot  = round && lastShot(round);
+  const taggable = Boolean(round && shot && shot.club !== null);
+
+  document.querySelectorAll(".club").forEach(b => { b.disabled = !ready; });
+
+  const water = document.getElementById("waterBtn");
+  const ob    = document.getElementById("obBtn");
+  water.disabled = !taggable;
+  ob.disabled    = !taggable;
+  water.setAttribute("aria-pressed", String(taggable && shot.outcome === "water"));
+  ob.setAttribute("aria-pressed",    String(taggable && shot.outcome === "ob"));
+
+  document.getElementById("undoBtn").disabled  = !(round && round.shots.length > 0);
+  document.getElementById("holedBtn").disabled = !(ready && round && round.shots.length > 0);
+}
 
 function render() {
   const round = activeRound();
-
   document.getElementById("startScreen").hidden = Boolean(round);
   document.getElementById("roundScreen").hidden = !round;
   if (!round) return;
@@ -487,12 +558,19 @@ function render() {
   tag.textContent = round.source === "sim" ? "SIMULATOR" : "REAL";
   tag.classList.toggle("is-sim", round.source === "sim");
 
+  document.getElementById("strokes").textContent = strokeCount(round) + " strokes";
+
+  const last = lastShot(round);
+  document.querySelectorAll(".club").forEach(b =>
+    b.classList.toggle("is-last", Boolean(last) && b.textContent === last.club)
+  );
+
   const log = document.getElementById("log");
   log.innerHTML = "";
   document.getElementById("empty").hidden = round.shots.length > 0;
 
   round.shots.forEach((shot, i) => {
-    const next = round.shots[i + 1];
+    const dist = distanceFor(shot, round.shots[i + 1]);
     const li = document.createElement("li");
     if (shot.club === null) li.classList.add("is-holed");
 
@@ -504,30 +582,39 @@ function render() {
     club.className = "club-name";
     club.textContent = shot.club ?? "in";
 
-    const meta = document.createElement("span");
-    meta.textContent = "\u00B1" + Math.round(shot.accuracy) + "m";
-    meta.style.color = "var(--muted)";
+    const note = document.createElement("span");
+    note.className = "note";
+    note.textContent =
+      shot.outcome === "water" ? "water +1"
+      : shot.outcome === "ob"  ? "lost +1"
+      : "\u00B1" + Math.round(shot.accuracy) + "m";
 
     const yds = document.createElement("span");
-    if (shot.club === null) {
-      yds.className = "yds pending";
-      yds.textContent = "\u2014";
-    } else if (next) {
+    if (dist.kind === "measured") {
       yds.className = "yds";
-      yds.textContent = Math.round(haversineYards(shot, next)) + " yds";
-    } else {
+      yds.textContent = Math.round(dist.yards) + " yds";
+    } else if (dist.kind === "floor") {
+      yds.className = "yds floor";
+      yds.textContent = "\u2265 " + Math.round(dist.yards) + " yds";
+    } else if (dist.kind === "unknown") {
+      yds.className = "yds void";
+      yds.textContent = "no dist";
+    } else if (dist.kind === "pending") {
       yds.className = "yds pending";
       yds.textContent = "in play";
+    } else {
+      yds.className = "yds pending";
+      yds.textContent = "\u2014";
     }
 
-    li.append(n, club, meta, yds);
+    li.append(n, club, note, yds);
     log.append(li);
   });
 
-  refreshButtons();
+  refreshControls();
 }
 
-/* ---- wire it up ----------------------------------------------- */
+/* ---- wire it up ------------------------------------------------ */
 
 db = load();
 buildClubs();
@@ -535,10 +622,13 @@ buildClubs();
 document.querySelectorAll(".start-choice").forEach(btn =>
   btn.addEventListener("click", () => startRound(btn.dataset.source))
 );
-document.getElementById("markBtn").addEventListener("click", markBall);
-document.getElementById("holedBtn").addEventListener("click", holeOut);
+document.getElementById("waterBtn").addEventListener("click", () => tagPenalty("water"));
+document.getElementById("obBtn").addEventListener("click",    () => tagPenalty("ob"));
+document.getElementById("undoBtn").addEventListener("click", undo);
+document.getElementById("holedBtn").addEventListener("click", () => capture(null));
 document.getElementById("endBtn").addEventListener("click", endRound);
 
+showIdle("Tap the club in your hand.");
 render();
 </script>
 </body>
