@@ -3,52 +3,59 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Shot Log — Step 1</title>
+<title>Shot Log — Step 2</title>
 
 <!--
   ============================================================
-  STEP 1: capture a GPS point when you tap a button.
-  One file. No frameworks. No build tools. No server code.
+  STEP 2: marks stop evaporating.
 
-  What it does:
-    - watches your position continuously (live readout)
-    - lets you MARK a point
-    - measures the straight-line gap between the last two marks
+  New since step 1:
+    - a ROUND is now a real thing, tagged real or simulator
+    - you pick the club before you mark
+    - everything saves to localStorage and survives a refresh
 
-  What it does NOT do yet:
-    - no club picker, no rollout tag, no saving, no export
+  THE ONE MODELLING IDEA THAT MATTERS
+  -----------------------------------
+  A mark is a position. A SHOT is a position plus the club you
+  hit FROM there. So the club you tag belongs to the ball you are
+  standing over, not the one you just hit.
 
-  READ THE THREE COMMENTED SECTIONS BELOW IN ORDER:
-    [1] the geolocation call        (how the phone talks to satellites)
-    [2] the haversine function      (how two points become a distance)
-    [3] the render function         (how data becomes pixels)
+  Which means a shot's distance is the gap to the NEXT mark, and
+  is unknowable until you take it. The last mark of a hole (the
+  ball in the cup) has no club at all.
+
+  Get this backwards and every distance in your table is
+  attributed to the wrong club. It is the single easiest way to
+  quietly ruin six weeks of data.
+
+  READ THESE IN ORDER:
+    [1] the schema        (the shape of the data. hardest to change later)
+    [2] save / load       (localStorage holds strings, nothing else)
+    [3] the shot list     (where club meets distance)
   ============================================================
 -->
 
 <style>
-  /* ---- tokens ------------------------------------------------ */
   :root {
-    --paper:  #EDEFEC;   /* cool near-white. readable in direct sun */
+    --paper:  #EDEFEC;
     --ink:    #14170F;
     --muted:  #757B72;
     --rule:   #C9CDC5;
-    --mark:   #EE4B0A;   /* surveyor orange — the capture action */
-    --good:   #2F6B37;   /* fix quality: usable */
-    --poor:   #A8501A;   /* fix quality: don't trust it */
+    --mark:   #EE4B0A;
+    --good:   #2F6B37;
+    --poor:   #A8501A;
+    --sim:    #3A5A8C;   /* simulator rounds read cool, real rounds read warm */
 
-    /* numbers are data. data is monospace. */
     --mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
-  /* NOTE: no Google Fonts on purpose. Webfonts need the network,
-     and this thing has to work in a valley with no bars. */
 
   * { box-sizing: border-box; }
 
   body {
     margin: 0;
     min-height: 100dvh;
-    padding: max(1rem, env(safe-area-inset-top)) 1rem 1rem;
+    padding: max(1rem, env(safe-area-inset-top)) 1rem 2rem;
     background: var(--paper);
     color: var(--ink);
     font-family: var(--sans);
@@ -60,112 +67,183 @@
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--muted);
+    margin: 0 0 0.5rem;
   }
 
-  /* ---- live fix ---------------------------------------------- */
-  .fix {
+  button { font-family: var(--sans); cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+  /* ---- round header ------------------------------------------ */
+  .round-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
     border-top: 2px solid var(--ink);
-    padding-top: 0.75rem;
+    border-bottom: 1px solid var(--rule);
+    padding: 0.625rem 0;
+    margin-bottom: 1.25rem;
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+  }
+  .tag {
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 0.6875rem;
+    padding: 0.2rem 0.4rem;
+    color: var(--paper);
+    background: var(--mark);
+  }
+  .tag.is-sim { background: var(--sim); }
+
+  .link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--muted);
+    font-size: 0.75rem;
+    text-decoration: underline;
   }
 
+  /* ---- start screen ------------------------------------------- */
+  .start h1 {
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+    margin: 0.25rem 0 0.5rem;
+  }
+  .start p { color: var(--muted); font-size: 0.9375rem; margin: 0 0 1.5rem; }
+  .start-choice {
+    display: block;
+    width: 100%;
+    padding: 1.25rem;
+    margin-bottom: 0.75rem;
+    border: 2px solid var(--ink);
+    border-radius: 2px;
+    background: var(--paper);
+    text-align: left;
+  }
+  .start-choice strong { display: block; font-size: 1.0625rem; }
+  .start-choice span { color: var(--muted); font-size: 0.8125rem; }
+  .start-choice:active { background: var(--rule); }
+
+  /* ---- live fix ----------------------------------------------- */
   .coords {
     font-family: var(--mono);
-    font-size: clamp(1.75rem, 9vw, 2.75rem);
+    font-size: clamp(1.375rem, 6.5vw, 2rem);
     font-weight: 500;
-    line-height: 1.05;
+    line-height: 1.1;
     letter-spacing: -0.02em;
-    margin: 0.5rem 0 0;
+    margin: 0;
     font-variant-numeric: tabular-nums;
   }
   .coords span { display: block; }
 
   .accuracy {
-    display: flex;
-    align-items: baseline;
-    gap: 0.5rem;
-    margin-top: 0.75rem;
-    font-family: var(--mono);
-    font-size: 0.875rem;
+    display: flex; align-items: center; gap: 0.5rem;
+    margin: 0.625rem 0 1.25rem;
+    font-family: var(--mono); font-size: 0.8125rem;
   }
-  .dot {
-    width: 0.55rem; height: 0.55rem;
-    border-radius: 50%;
-    background: var(--muted);
-    flex: none;
-    align-self: center;
-  }
+  .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--muted); flex: none; }
   .dot.is-good { background: var(--good); }
   .dot.is-poor { background: var(--poor); }
 
-  /* ---- capture button ---------------------------------------- */
-  /* big, glove-friendly, thumb-reachable, one hand */
-  .capture {
-    display: block;
-    width: 100%;
-    margin: 1.5rem 0;
-    padding: 1.5rem;
-    border: none;
+  /* ---- club picker -------------------------------------------- */
+  /* thumb-sized targets. you are wearing a glove and it is windy. */
+  .clubs {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(4rem, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+  }
+  .club {
+    padding: 0.875rem 0.25rem;
+    border: 1px solid var(--rule);
     border-radius: 2px;
+    background: var(--paper);
+    font-family: var(--mono);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .club[aria-pressed="true"] {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+  }
+
+  /* ---- capture ------------------------------------------------ */
+  .capture {
+    display: block; width: 100%;
+    padding: 1.5rem;
+    border: none; border-radius: 2px;
     background: var(--mark);
     color: var(--paper);
     font: 700 1.125rem/1 var(--sans);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    cursor: pointer;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    margin-bottom: 0.5rem;
   }
   .capture:active { transform: translateY(1px); }
   .capture:disabled { background: var(--rule); color: var(--muted); }
-  .capture:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
 
-  /* ---- the gap ------------------------------------------------ */
-  .gap {
-    border: 2px solid var(--ink);
-    padding: 1rem;
-    margin-bottom: 1.5rem;
+  .holed {
+    display: block; width: 100%;
+    padding: 0.875rem;
+    border: 1px solid var(--rule); border-radius: 2px;
+    background: transparent; color: var(--muted);
+    font-size: 0.8125rem; letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 1.75rem;
   }
-  .gap-value {
-    font-family: var(--mono);
-    font-size: 3rem;
-    font-weight: 600;
-    line-height: 1;
-    margin: 0.25rem 0 0;
-    font-variant-numeric: tabular-nums;
-  }
-  .gap-value small {
-    font-size: 1rem;
-    font-weight: 400;
-    color: var(--muted);
-    margin-left: 0.35rem;
-  }
+  .holed:disabled { opacity: 0.4; }
 
-  /* ---- mark log ----------------------------------------------- */
-  /* marks ARE a sequence, so they get numbered. */
+  /* ---- shot log ------------------------------------------------ */
   .log { list-style: none; margin: 0; padding: 0; }
   .log li {
     display: grid;
-    grid-template-columns: 2.25rem 1fr auto;
-    gap: 0.75rem;
+    grid-template-columns: 2rem 3.5rem 1fr auto;
+    gap: 0.625rem;
     align-items: baseline;
-    padding: 0.625rem 0;
+    padding: 0.6875rem 0;
     border-bottom: 1px solid var(--rule);
     font-family: var(--mono);
-    font-size: 0.8125rem;
+    font-size: 0.875rem;
   }
-  .log .n { color: var(--mark); font-weight: 600; }
-  .log .acc { color: var(--muted); }
+  .log .n { color: var(--mark); font-weight: 600; font-size: 0.75rem; }
+  .log .club-name { font-weight: 600; }
+  .log .yds { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .log .pending { color: var(--muted); font-weight: 400; }
+  .log li.is-holed .club-name { color: var(--muted); }
 
   .empty { color: var(--muted); font-size: 0.875rem; padding: 1rem 0; }
-
-  @media (prefers-reduced-motion: reduce) {
-    * { transition: none !important; }
-  }
+  [hidden] { display: none !important; }
 </style>
 </head>
 <body>
 
-  <p class="eyebrow">Live fix</p>
-  <div class="fix">
-    <p class="coords" id="coords">
+  <!-- START SCREEN -->
+  <section class="start" id="startScreen" hidden>
+    <p class="eyebrow">New round</p>
+    <h1>Where are you playing?</h1>
+    <p>Set once. Every shot in this round inherits it.</p>
+
+    <button class="start-choice" data-source="real">
+      <strong>Real course</strong>
+      <span>Wind, weather, actual lies</span>
+    </button>
+    <button class="start-choice" data-source="sim">
+      <strong>Simulator</strong>
+      <span>Flagged separately. Filter or discard later.</span>
+    </button>
+  </section>
+
+  <!-- ROUND SCREEN -->
+  <section id="roundScreen" hidden>
+    <div class="round-bar">
+      <span class="tag" id="sourceTag">REAL</span>
+      <button class="link-btn" id="endBtn">End round</button>
+    </div>
+
+    <p class="eyebrow">Live fix</p>
+    <p class="coords">
       <span id="lat">—</span>
       <span id="lng">—</span>
     </p>
@@ -173,59 +251,118 @@
       <span class="dot" id="dot"></span>
       <span id="acc">waiting for satellites</span>
     </p>
-  </div>
 
-  <button class="capture" id="markBtn" disabled>Mark this spot</button>
+    <p class="eyebrow">Club in hand</p>
+    <div class="clubs" id="clubs"></div>
 
-  <div class="gap" id="gapBox" hidden>
-    <p class="eyebrow">Last shot</p>
-    <p class="gap-value"><span id="gapValue">0</span><small>yards</small></p>
-  </div>
+    <button class="capture" id="markBtn" disabled>Mark ball</button>
+    <button class="holed" id="holedBtn" disabled>Holed out — end hole</button>
 
-  <p class="eyebrow">Marks</p>
-  <ul class="log" id="log"></ul>
-  <p class="empty" id="empty">Nothing marked yet.</p>
+    <p class="eyebrow">This round</p>
+    <ul class="log" id="log"></ul>
+    <p class="empty" id="empty">No shots yet. Stand at your ball, pick a club, mark it.</p>
+  </section>
 
 <script>
 "use strict";
 
-// Every mark we take this session. Lives in memory only — refresh and it's gone.
-// Persisting this is step 2's job.
-const marks = [];
-
 /* ============================================================
-   [1] TALKING TO THE SATELLITES
+   [1] THE SCHEMA
 
-   navigator.geolocation.watchPosition() fires a callback every
-   time the phone gets a new fix. It does NOT need the internet —
-   the GPS chip is receive-only. Airplane mode + location on works.
+   Write this down deliberately. Code is easy to change. Data is
+   not — once six rounds are stored in the old shape, every future
+   version has to keep reading it.
 
-   enableHighAccuracy tells the phone to actually use GPS instead
-   of guessing from wifi/cell towers. It costs battery. On a golf
-   course, worth it.
+   schemaVersion is cheap insurance. When you inevitably change
+   the shape, you can detect old data and migrate it rather than
+   crash on it.
 
-   Note the shape: we hand watchPosition two functions and it calls
-   ONE of them, later, whenever it feels like it. That's async, and
-   it's the main thing that feels weird coming from Java.
+   round = {
+     id, startedAt, endedAt, source: "real" | "sim",
+     shots: [ shot, ... ]
+   }
+
+   shot = {
+     lat, lng, accuracy, at,
+     club: "7i" | null    <- null means "ball in the cup", no shot hit
+   }
+
+   Notice what is NOT stored: distance. It is derived from the gap
+   to the next shot. Never store what you can compute — stored
+   copies drift out of sync with the truth.
    ============================================================ */
 
-const watchId = navigator.geolocation.watchPosition(
-  onFix,      // success  -> gets a Position object
-  onFixError, // failure  -> gets an error object
-  {
-    enableHighAccuracy: true,
-    maximumAge: 0,      // never hand us a cached fix
-    timeout: 15000
-  }
-);
+const STORAGE_KEY = "shotlog:v1";
+const SCHEMA_VERSION = 1;
 
-let currentFix = null;
+// Your bag. Edit freely — nothing downstream cares what these strings are.
+const BAG = ["Dr","3w","5w","4h","5i","6i","7i","8i","9i","PW","GW","SW","LW","Putt","?"];
+
+const EARTH_RADIUS_M = 6371000;
+const M_TO_YARDS = 1.09361;
+
+let db = null;          // the whole saved world
+let currentFix = null;  // latest GPS reading, not yet marked
+let selectedClub = null;
+
+/* ============================================================
+   [2] SAVE AND LOAD
+
+   localStorage stores STRINGS. Nothing else. So every save is a
+   JSON.stringify and every load is a JSON.parse.
+
+   It is per-origin and roughly 5MB. A round of golf is a few KB,
+   so you will never come close.
+
+   The honest caveat: this is the browser's storage, not yours.
+   Clearing site data wipes it. Step 5 (export to JSON) is the
+   safety net. Until then, do not clear your browsing data.
+   ============================================================ */
+
+function load() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return { schemaVersion: SCHEMA_VERSION, rounds: [] };
+
+  try {
+    const parsed = JSON.parse(raw);
+    // A future you will thank a present you for this branch.
+    if (parsed.schemaVersion !== SCHEMA_VERSION) {
+      console.warn("Old schema found. Migration would go here.");
+    }
+    return parsed;
+  } catch (err) {
+    console.error("Corrupt storage, starting fresh:", err);
+    return { schemaVersion: SCHEMA_VERSION, rounds: [] };
+  }
+}
+
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+}
+
+function activeRound() {
+  return db.rounds.find(r => !r.endedAt) || null;
+}
+
+/* ---- geolocation (unchanged from step 1) --------------------- */
+
+navigator.geolocation.watchPosition(onFix, onFixError, {
+  enableHighAccuracy: true,
+  maximumAge: 0,
+  timeout: 15000
+});
 
 function onFix(position) {
-  // position.coords holds latitude, longitude, accuracy (metres), and more
   currentFix = position.coords;
-  renderFix(currentFix);
-  document.getElementById("markBtn").disabled = false;
+  document.getElementById("lat").textContent = currentFix.latitude.toFixed(6);
+  document.getElementById("lng").textContent = currentFix.longitude.toFixed(6);
+
+  const m = Math.round(currentFix.accuracy);
+  document.getElementById("acc").textContent = "\u00B1" + m + " m";
+  document.getElementById("dot").className =
+    "dot " + (m <= 10 ? "is-good" : m <= 20 ? "" : "is-poor");
+
+  refreshButtons();
 }
 
 function onFixError(err) {
@@ -233,103 +370,176 @@ function onFixError(err) {
   document.getElementById("dot").className = "dot is-poor";
 }
 
-/* ============================================================
-   [2] TWO POINTS BECOME A DISTANCE
-
-   The haversine formula: great-circle distance between two
-   lat/lng pairs on a sphere.
-
-   Earlier I mentioned projecting to UTM before measuring. That
-   matters for big areas and for polygon geometry. For two points
-   200 yards apart, haversine is accurate to well under an inch.
-   Use it here; project later, when we're intersecting hazards.
-   ============================================================ */
-
-const EARTH_RADIUS_M = 6371000;
-const M_TO_YARDS = 1.09361;
-
 function haversineYards(a, b) {
-  const toRad = (deg) => deg * Math.PI / 180;
-
-  const dLat = toRad(b.latitude  - a.latitude);
-  const dLng = toRad(b.longitude - a.longitude);
-  const lat1 = toRad(a.latitude);
-  const lat2 = toRad(b.latitude);
-
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
   const h = Math.sin(dLat / 2) ** 2
-          + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+          + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h)) * M_TO_YARDS;
+}
 
-  const metres = 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
-  return metres * M_TO_YARDS;
+/* ---- club picker --------------------------------------------- */
+
+function buildClubs() {
+  const wrap = document.getElementById("clubs");
+  BAG.forEach(name => {
+    const b = document.createElement("button");
+    b.className = "club";
+    b.type = "button";
+    b.textContent = name;
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", () => {
+      selectedClub = (selectedClub === name) ? null : name;  // tap again to clear
+      document.querySelectorAll(".club").forEach(el =>
+        el.setAttribute("aria-pressed", String(el.textContent === selectedClub))
+      );
+      refreshButtons();
+    });
+    wrap.append(b);
+  });
+}
+
+function refreshButtons() {
+  const round = activeRound();
+  const ready = Boolean(currentFix && round);
+  document.getElementById("markBtn").disabled = !(ready && selectedClub);
+  document.getElementById("holedBtn").disabled = !(ready && round.shots.length > 0);
+}
+
+/* ---- actions -------------------------------------------------- */
+
+function markBall() {
+  const round = activeRound();
+  if (!round || !currentFix || !selectedClub) return;
+
+  round.shots.push({
+    lat: currentFix.latitude,
+    lng: currentFix.longitude,
+    accuracy: currentFix.accuracy,
+    club: selectedClub,
+    at: new Date().toISOString()
+  });
+
+  save();
+  selectedClub = null;
+  document.querySelectorAll(".club").forEach(el => el.setAttribute("aria-pressed", "false"));
+  render();
+}
+
+// The ball is in the cup. This is a position with no club — it closes
+// out the previous shot's distance and hits nothing itself.
+function holeOut() {
+  const round = activeRound();
+  if (!round || !currentFix) return;
+
+  round.shots.push({
+    lat: currentFix.latitude,
+    lng: currentFix.longitude,
+    accuracy: currentFix.accuracy,
+    club: null,
+    at: new Date().toISOString()
+  });
+
+  save();
+  render();
+}
+
+function startRound(source) {
+  db.rounds.push({
+    id: Date.now(),
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    source: source,
+    shots: []
+  });
+  save();
+  render();
+}
+
+function endRound() {
+  const round = activeRound();
+  if (!round) return;
+  if (!confirm("End this round? Shots are kept.")) return;
+  round.endedAt = new Date().toISOString();
+  save();
+  render();
 }
 
 /* ============================================================
-   [3] DATA BECOMES PIXELS
+   [3] THE SHOT LIST — where club meets distance
+
+   Shot i's distance is the gap from shot i to shot i+1.
+   The final shot has no next mark, so it has no distance yet.
+   That "pending" row is not a bug. It is the ball you are about
+   to hit, and the app cannot know how far it goes until you walk
+   to it. Golf, faithfully modelled.
    ============================================================ */
 
-function renderFix(coords) {
-  document.getElementById("lat").textContent = coords.latitude.toFixed(6);
-  document.getElementById("lng").textContent = coords.longitude.toFixed(6);
+function render() {
+  const round = activeRound();
 
-  const m = Math.round(coords.accuracy);
-  document.getElementById("acc").textContent = "\u00B1" + m + " m";
+  document.getElementById("startScreen").hidden = Boolean(round);
+  document.getElementById("roundScreen").hidden = !round;
+  if (!round) return;
 
-  // Under 10m is usable for shot logging. Over 20m and the number lies to you.
-  const dot = document.getElementById("dot");
-  dot.className = "dot " + (m <= 10 ? "is-good" : m <= 20 ? "" : "is-poor");
-}
+  const tag = document.getElementById("sourceTag");
+  tag.textContent = round.source === "sim" ? "SIMULATOR" : "REAL";
+  tag.classList.toggle("is-sim", round.source === "sim");
 
-function renderLog() {
   const log = document.getElementById("log");
   log.innerHTML = "";
+  document.getElementById("empty").hidden = round.shots.length > 0;
 
-  document.getElementById("empty").hidden = marks.length > 0;
-
-  marks.forEach((mark, i) => {
+  round.shots.forEach((shot, i) => {
+    const next = round.shots[i + 1];
     const li = document.createElement("li");
+    if (shot.club === null) li.classList.add("is-holed");
 
     const n = document.createElement("span");
     n.className = "n";
     n.textContent = String(i + 1).padStart(2, "0");
 
-    const pos = document.createElement("span");
-    pos.textContent = mark.latitude.toFixed(5) + ", " + mark.longitude.toFixed(5);
+    const club = document.createElement("span");
+    club.className = "club-name";
+    club.textContent = shot.club ?? "in";
 
-    const acc = document.createElement("span");
-    acc.className = "acc";
-    acc.textContent = "\u00B1" + Math.round(mark.accuracy) + "m";
+    const meta = document.createElement("span");
+    meta.textContent = "\u00B1" + Math.round(shot.accuracy) + "m";
+    meta.style.color = "var(--muted)";
 
-    li.append(n, pos, acc);
+    const yds = document.createElement("span");
+    if (shot.club === null) {
+      yds.className = "yds pending";
+      yds.textContent = "\u2014";
+    } else if (next) {
+      yds.className = "yds";
+      yds.textContent = Math.round(haversineYards(shot, next)) + " yds";
+    } else {
+      yds.className = "yds pending";
+      yds.textContent = "in play";
+    }
+
+    li.append(n, club, meta, yds);
     log.append(li);
   });
 
-  // The gap between the last two marks — this is the whole measurement
-  // idea in miniature. Everything downstream is built on it.
-  const gapBox = document.getElementById("gapBox");
-  if (marks.length >= 2) {
-    const gap = haversineYards(marks[marks.length - 2], marks[marks.length - 1]);
-    document.getElementById("gapValue").textContent = Math.round(gap);
-    gapBox.hidden = false;
-  } else {
-    gapBox.hidden = true;
-  }
+  refreshButtons();
 }
 
-document.getElementById("markBtn").addEventListener("click", () => {
-  if (!currentFix) return;
+/* ---- wire it up ----------------------------------------------- */
 
-  // Copy the values out. Don't hold a reference to the live coords object.
-  marks.push({
-    latitude:  currentFix.latitude,
-    longitude: currentFix.longitude,
-    accuracy:  currentFix.accuracy,
-    at:        new Date().toISOString()
-  });
+db = load();
+buildClubs();
 
-  renderLog();
-});
+document.querySelectorAll(".start-choice").forEach(btn =>
+  btn.addEventListener("click", () => startRound(btn.dataset.source))
+);
+document.getElementById("markBtn").addEventListener("click", markBall);
+document.getElementById("holedBtn").addEventListener("click", holeOut);
+document.getElementById("endBtn").addEventListener("click", endRound);
 
-renderLog();
+render();
 </script>
 </body>
 </html>
