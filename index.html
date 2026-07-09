@@ -31,6 +31,13 @@
   the alternative is discovering you have eleven copies of
   Tuesday.
 
+  SWINGS VS STROKES
+  -----------------
+  A hole-out mark records where the ball finished. It is a position,
+  not a swing — the putt that got it there was already counted. So
+  swings counts only shots you actually hit, and strokes adds the
+  penalties on top. They agree until you find water.
+
   READ THESE IN ORDER:
     [1] the schema + migrations
     [2] exportJson / importJson    (the safety net)
@@ -643,6 +650,18 @@ function buildClubs() {
   });
 }
 
+/* A SWING is a shot you actually hit. A hole-out mark (club === null)
+   is a position, not a swing — nobody plays a stroke from inside the
+   cup. The putt that got the ball there was already counted.
+
+   STROKES = swings + penalties. The two numbers agree until you find
+   water, and that divergence is the point.
+
+   Note this distinction lives in the data as `club: null`, not as a
+   separate isHoleOut flag. The display just has to remember it. */
+const swingCount = round =>
+  round.shots.filter(s => s.club !== null).length;
+
 const strokeCount = round =>
   round.shots.reduce((n, s) => n + (s.club === null ? 0 : 1) + s.penaltyStrokes, 0);
 
@@ -683,7 +702,7 @@ function renderRounds() {
     meta.className = "meta" + (round.source === "sim" ? " is-sim" : "");
     meta.textContent =
       (round.source === "sim" ? "sim \u00B7 " : "") +
-      round.shots.length + " shots \u00B7 " + strokeCount(round) + " strokes";
+      swingCount(round) + " swings \u00B7 " + strokeCount(round) + " strokes";
 
     const del = document.createElement("button");
     del.className = "del";
@@ -708,7 +727,8 @@ function render() {
   tag.textContent = round.source === "sim" ? "SIMULATOR" : "REAL";
   tag.classList.toggle("is-sim", round.source === "sim");
 
-  document.getElementById("strokes").textContent = strokeCount(round) + " strokes";
+  document.getElementById("strokes").textContent =
+    swingCount(round) + " swings \u00B7 " + strokeCount(round) + " strokes";
 
   const last = lastShot(round);
   document.querySelectorAll(".club").forEach(b =>
