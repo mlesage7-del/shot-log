@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shot Log — Step 1</title>
+
+<!--
+  ============================================================
+  STEP 1: capture a GPS point when you tap a button.
+  One file. No frameworks. No build tools. No server code.
+
+  What it does:
+    - watches your position continuously (live readout)
+    - lets you MARK a point
+    - measures the straight-line gap between the last two marks
+
+  What it does NOT do yet:
+    - no club picker, no rollout tag, no saving, no export
+
+  READ THE THREE COMMENTED SECTIONS BELOW IN ORDER:
+    [1] the geolocation call        (how the phone talks to satellites)
+    [2] the haversine function      (how two points become a distance)
+    [3] the render function         (how data becomes pixels)
+  ============================================================
+-->
+
+<style>
+  /* ---- tokens ------------------------------------------------ */
+  :root {
+    --paper:  #EDEFEC;   /* cool near-white. readable in direct sun */
+    --ink:    #14170F;
+    --muted:  #757B72;
+    --rule:   #C9CDC5;
+    --mark:   #EE4B0A;   /* surveyor orange — the capture action */
+    --good:   #2F6B37;   /* fix quality: usable */
+    --poor:   #A8501A;   /* fix quality: don't trust it */
+
+    /* numbers are data. data is monospace. */
+    --mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  /* NOTE: no Google Fonts on purpose. Webfonts need the network,
+     and this thing has to work in a valley with no bars. */
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    padding: max(1rem, env(safe-area-inset-top)) 1rem 1rem;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .eyebrow {
+    font: 600 0.6875rem/1 var(--sans);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ---- live fix ---------------------------------------------- */
+  .fix {
+    border-top: 2px solid var(--ink);
+    padding-top: 0.75rem;
+  }
+
+  .coords {
+    font-family: var(--mono);
+    font-size: clamp(1.75rem, 9vw, 2.75rem);
+    font-weight: 500;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 0.5rem 0 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .coords span { display: block; }
+
+  .accuracy {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    font-family: var(--mono);
+    font-size: 0.875rem;
+  }
+  .dot {
+    width: 0.55rem; height: 0.55rem;
+    border-radius: 50%;
+    background: var(--muted);
+    flex: none;
+    align-self: center;
+  }
+  .dot.is-good { background: var(--good); }
+  .dot.is-poor { background: var(--poor); }
+
+  /* ---- capture button ---------------------------------------- */
+  /* big, glove-friendly, thumb-reachable, one hand */
+  .capture {
+    display: block;
+    width: 100%;
+    margin: 1.5rem 0;
+    padding: 1.5rem;
+    border: none;
+    border-radius: 2px;
+    background: var(--mark);
+    color: var(--paper);
+    font: 700 1.125rem/1 var(--sans);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .capture:active { transform: translateY(1px); }
+  .capture:disabled { background: var(--rule); color: var(--muted); }
+  .capture:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+
+  /* ---- the gap ------------------------------------------------ */
+  .gap {
+    border: 2px solid var(--ink);
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .gap-value {
+    font-family: var(--mono);
+    font-size: 3rem;
+    font-weight: 600;
+    line-height: 1;
+    margin: 0.25rem 0 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .gap-value small {
+    font-size: 1rem;
+    font-weight: 400;
+    color: var(--muted);
+    margin-left: 0.35rem;
+  }
+
+  /* ---- mark log ----------------------------------------------- */
+  /* marks ARE a sequence, so they get numbered. */
+  .log { list-style: none; margin: 0; padding: 0; }
+  .log li {
+    display: grid;
+    grid-template-columns: 2.25rem 1fr auto;
+    gap: 0.75rem;
+    align-items: baseline;
+    padding: 0.625rem 0;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+  }
+  .log .n { color: var(--mark); font-weight: 600; }
+  .log .acc { color: var(--muted); }
+
+  .empty { color: var(--muted); font-size: 0.875rem; padding: 1rem 0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+  <p class="eyebrow">Live fix</p>
+  <div class="fix">
+    <p class="coords" id="coords">
+      <span id="lat">—</span>
+      <span id="lng">—</span>
+    </p>
+    <p class="accuracy">
+      <span class="dot" id="dot"></span>
+      <span id="acc">waiting for satellites</span>
+    </p>
+  </div>
+
+  <button class="capture" id="markBtn" disabled>Mark this spot</button>
+
+  <div class="gap" id="gapBox" hidden>
+    <p class="eyebrow">Last shot</p>
+    <p class="gap-value"><span id="gapValue">0</span><small>yards</small></p>
+  </div>
+
+  <p class="eyebrow">Marks</p>
+  <ul class="log" id="log"></ul>
+  <p class="empty" id="empty">Nothing marked yet.</p>
+
+<script>
+"use strict";
+
+// Every mark we take this session. Lives in memory only — refresh and it's gone.
+// Persisting this is step 2's job.
+const marks = [];
+
+/* ============================================================
+   [1] TALKING TO THE SATELLITES
+
+   navigator.geolocation.watchPosition() fires a callback every
+   time the phone gets a new fix. It does NOT need the internet —
+   the GPS chip is receive-only. Airplane mode + location on works.
+
+   enableHighAccuracy tells the phone to actually use GPS instead
+   of guessing from wifi/cell towers. It costs battery. On a golf
+   course, worth it.
+
+   Note the shape: we hand watchPosition two functions and it calls
+   ONE of them, later, whenever it feels like it. That's async, and
+   it's the main thing that feels weird coming from Java.
+   ============================================================ */
+
+const watchId = navigator.geolocation.watchPosition(
+  onFix,      // success  -> gets a Position object
+  onFixError, // failure  -> gets an error object
+  {
+    enableHighAccuracy: true,
+    maximumAge: 0,      // never hand us a cached fix
+    timeout: 15000
+  }
+);
+
+let currentFix = null;
+
+function onFix(position) {
+  // position.coords holds latitude, longitude, accuracy (metres), and more
+  currentFix = position.coords;
+  renderFix(currentFix);
+  document.getElementById("markBtn").disabled = false;
+}
+
+function onFixError(err) {
+  document.getElementById("acc").textContent = "No fix — " + err.message;
+  document.getElementById("dot").className = "dot is-poor";
+}
+
+/* ============================================================
+   [2] TWO POINTS BECOME A DISTANCE
+
+   The haversine formula: great-circle distance between two
+   lat/lng pairs on a sphere.
+
+   Earlier I mentioned projecting to UTM before measuring. That
+   matters for big areas and for polygon geometry. For two points
+   200 yards apart, haversine is accurate to well under an inch.
+   Use it here; project later, when we're intersecting hazards.
+   ============================================================ */
+
+const EARTH_RADIUS_M = 6371000;
+const M_TO_YARDS = 1.09361;
+
+function haversineYards(a, b) {
+  const toRad = (deg) => deg * Math.PI / 180;
+
+  const dLat = toRad(b.latitude  - a.latitude);
+  const dLng = toRad(b.longitude - a.longitude);
+  const lat1 = toRad(a.latitude);
+  const lat2 = toRad(b.latitude);
+
+  const h = Math.sin(dLat / 2) ** 2
+          + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+
+  const metres = 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h));
+  return metres * M_TO_YARDS;
+}
+
+/* ============================================================
+   [3] DATA BECOMES PIXELS
+   ============================================================ */
+
+function renderFix(coords) {
+  document.getElementById("lat").textContent = coords.latitude.toFixed(6);
+  document.getElementById("lng").textContent = coords.longitude.toFixed(6);
+
+  const m = Math.round(coords.accuracy);
+  document.getElementById("acc").textContent = "\u00B1" + m + " m";
+
+  // Under 10m is usable for shot logging. Over 20m and the number lies to you.
+  const dot = document.getElementById("dot");
+  dot.className = "dot " + (m <= 10 ? "is-good" : m <= 20 ? "" : "is-poor");
+}
+
+function renderLog() {
+  const log = document.getElementById("log");
+  log.innerHTML = "";
+
+  document.getElementById("empty").hidden = marks.length > 0;
+
+  marks.forEach((mark, i) => {
+    const li = document.createElement("li");
+
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = String(i + 1).padStart(2, "0");
+
+    const pos = document.createElement("span");
+    pos.textContent = mark.latitude.toFixed(5) + ", " + mark.longitude.toFixed(5);
+
+    const acc = document.createElement("span");
+    acc.className = "acc";
+    acc.textContent = "\u00B1" + Math.round(mark.accuracy) + "m";
+
+    li.append(n, pos, acc);
+    log.append(li);
+  });
+
+  // The gap between the last two marks — this is the whole measurement
+  // idea in miniature. Everything downstream is built on it.
+  const gapBox = document.getElementById("gapBox");
+  if (marks.length >= 2) {
+    const gap = haversineYards(marks[marks.length - 2], marks[marks.length - 1]);
+    document.getElementById("gapValue").textContent = Math.round(gap);
+    gapBox.hidden = false;
+  } else {
+    gapBox.hidden = true;
+  }
+}
+
+document.getElementById("markBtn").addEventListener("click", () => {
+  if (!currentFix) return;
+
+  // Copy the values out. Don't hold a reference to the live coords object.
+  marks.push({
+    latitude:  currentFix.latitude,
+    longitude: currentFix.longitude,
+    accuracy:  currentFix.accuracy,
+    at:        new Date().toISOString()
+  });
+
+  renderLog();
+});
+
+renderLog();
+</script>
+</body>
+</html>
