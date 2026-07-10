@@ -3,45 +3,54 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Shot Log — Step 3</title>
+<title>Shot Log</title>
 
 <!--
   ============================================================
-  STEP 3: get the data out.
+  PHASE 3: the nudge.
 
-  localStorage is the browser's storage, not yours. Clearing site
-  data wipes it. A new phone does not carry it. Chrome may evict
-  it under storage pressure without asking. None of that matters
-  when you have one test round in there. All of it matters after
-  six weeks of logging.
+  The whole app exists to say one sentence before you swing:
+  "you don't have this club, lay up." Everything else — the
+  logging, the club table, the censored penalties — exists to
+  make that sentence trustworthy.
 
-  So: export before anything else gets built. The rollout tag can
-  wait; irreplaceable data cannot.
+  NEW HERE
+  --------
+  1. HOLE TRACKING. You pick a starting hole. Ending a hole
+     advances it. Wraps 18 -> 1, so a shotgun start just works.
+     The number is big and tappable, because inference is right
+     nearly always and catastrophically wrong the rest of the
+     time — it would confidently advise you about the pond on 12
+     while you stand on 13.
 
-  WHAT EXPORT ACTUALLY IS
-  -----------------------
-  Serialise the whole db object to JSON, wrap it in a Blob, hand
-  the browser an object URL, and click an invisible link. There is
-  no server, nothing uploads. The file lands in your Downloads
-  folder and it is yours.
+  2. PICKED UP. Same right-censoring as a wet drive, wearing
+     different clothes. Holed out = your score is known exactly.
+     Picked up = your score is a LOWER BOUND. You were lying
+     eight and hadn't finished. Recording a nine is a lie;
+     discarding it loses the fact the hole was a disaster.
+     So: record the position, tag it, keep the truth.
 
-  Import reads a file back and MERGES by round id rather than
-  overwriting. Importing the same file twice is harmless. That
-  property is called idempotence and it is worth designing for —
-  the alternative is discovering you have eleven copies of
-  Tuesday.
+  3. THE NUDGE. Ported from nudge.py, verified to give identical
+     answers on six holes of Glendale. It runs on your phone,
+     offline, from a cached club table. No server in the loop.
 
-  SWINGS VS STROKES
-  -----------------
-  A hole-out mark records where the ball finished. It is a position,
-  not a swing — the putt that got it there was already counted. So
-  swings counts only shots you actually hit, and strokes adds the
-  penalties on top. They agree until you find water.
+  THE TWO-TAIL IDEA, WHICH IS THE ACTUAL PRODUCT
+  ----------------------------------------------
+  A club that clears water must do two things at once:
 
-  READ THESE IN ORDER:
-    [1] the schema + migrations
-    [2] exportJson / importJson    (the safety net)
-    [3] distanceFor                (measured / floor / unknown)
+      carry the far edge WHEN YOU CATCH IT BADLY   -> short tail (safe, p20)
+      stop short of the next hazard WHEN FLUSHED   -> long tail  (p80)
+
+  Same club. Same distribution. Opposite ends. Golfers get both
+  backwards simultaneously: they clear water with their best-ever
+  drive, then lay up with their average wedge.
+
+  AND THE FAR EDGE, NOT THE NEAR ONE
+  ----------------------------------
+  To be dry you must carry PAST the water. The near edge is where
+  it begins — carrying to it puts you in the pond. Near edge is
+  your lay-up limit; far edge is your required carry. Two numbers,
+  and confusing them costs a stroke every time.
   ============================================================
 -->
 
@@ -64,11 +73,9 @@
   * { box-sizing: border-box; }
 
   body {
-    margin: 0;
-    min-height: 100dvh;
+    margin: 0; min-height: 100dvh;
     padding: max(1rem, env(safe-area-inset-top)) 1rem 2rem;
-    background: var(--paper);
-    color: var(--ink);
+    background: var(--paper); color: var(--ink);
     font-family: var(--sans);
     -webkit-font-smoothing: antialiased;
   }
@@ -88,7 +95,7 @@
   .round-bar {
     display: flex; justify-content: space-between; align-items: center;
     border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule);
-    padding: 0.625rem 0; margin-bottom: 1rem;
+    padding: 0.625rem 0; margin-bottom: 0.875rem;
   }
   .round-bar-left { display: flex; align-items: center; gap: 0.625rem; }
   .tag {
@@ -97,44 +104,70 @@
     padding: 0.3rem 0.45rem; color: var(--paper); background: var(--mark);
   }
   .tag.is-sim { background: var(--sim); }
+  .tag.is-synth { background: var(--poor); }
   .strokes { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
   .link-btn {
     background: none; border: none; padding: 0;
     color: var(--muted); font-size: 0.75rem; text-decoration: underline;
   }
 
-  /* ---- start screen ------------------------------------------- */
-  .start h1 { font-size: 1.5rem; letter-spacing: -0.02em; margin: 0.25rem 0 0.5rem; }
-  .start > p { color: var(--muted); font-size: 0.9375rem; margin: 0 0 1.5rem; }
-  .start-choice {
-    display: block; width: 100%; padding: 1.25rem; margin-bottom: 0.75rem;
-    border: 2px solid var(--ink); border-radius: 2px;
-    background: var(--paper); text-align: left;
+  /* ---- hole strip: inferred, but always overridable ----------- */
+  .hole-strip {
+    display: flex; align-items: baseline; gap: 0.625rem;
+    width: 100%; padding: 0.5rem 0 0.875rem;
+    background: none; border: none; text-align: left;
   }
-  .start-choice strong { display: block; font-size: 1.0625rem; }
-  .start-choice span { color: var(--muted); font-size: 0.8125rem; }
-  .start-choice:active { background: var(--rule); }
+  .hole-strip .n {
+    font-family: var(--mono); font-size: 2.75rem; font-weight: 600;
+    line-height: 0.9; letter-spacing: -0.03em;
+  }
+  .hole-strip .label {
+    font: 600 0.6875rem/1 var(--sans);
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  }
+  .hole-strip .tap { margin-left: auto; font-size: 0.6875rem; color: var(--muted); text-decoration: underline; }
 
-  /* ---- readout ------------------------------------------------ */
+  /* ---- the nudge: the reason this app exists ------------------ */
+  .nudge {
+    border: 2px solid var(--rule); border-radius: 2px;
+    padding: 0.875rem 1rem; margin-bottom: 1.25rem;
+  }
+  .nudge.is-quiet { border-style: dashed; }
+  .nudge.is-go    { border-color: var(--good); }
+  .nudge.is-layup { background: var(--penalty); border-color: var(--penalty); color: var(--paper); }
+  .nudge.is-layup .eyebrow { color: rgba(237,239,236,0.7); }
+
+  .verdict {
+    font: 700 1.5rem/1 var(--sans);
+    letter-spacing: -0.01em; margin: 0.25rem 0 0.5rem;
+  }
+  .nudge.is-go .verdict { color: var(--good); }
+  .nudge p.detail {
+    margin: 0.25rem 0 0; font-family: var(--mono);
+    font-size: 0.8125rem; line-height: 1.5;
+  }
+  .nudge .quiet { color: var(--muted); font-family: var(--mono); font-size: 0.8125rem; margin: 0; }
+  .nudge .water-span { font-variant-numeric: tabular-nums; }
+
+  /* ---- last-shot readout -------------------------------------- */
   .readout {
-    border: 2px solid var(--ink); padding: 0.875rem 1rem;
-    margin-bottom: 1.25rem; min-height: 5.25rem;
+    border: 1px solid var(--rule); padding: 0.75rem 1rem;
+    margin-bottom: 1rem; min-height: 4.5rem;
     display: flex; flex-direction: column; justify-content: center;
   }
-  .readout.is-fresh { background: var(--ink); color: var(--paper); }
+  .readout.is-fresh { background: var(--ink); border-color: var(--ink); color: var(--paper); }
   .readout.is-fresh .eyebrow { color: var(--rule); }
   .readout.is-penal { background: var(--penalty); border-color: var(--penalty); color: var(--paper); }
   .readout.is-penal .eyebrow { color: rgba(237,239,236,0.65); }
   .readout.is-penal .readout-idle { color: rgba(237,239,236,0.85); }
-
   .readout-value {
-    font-family: var(--mono); font-size: 2.5rem; font-weight: 600;
+    font-family: var(--mono); font-size: 2.125rem; font-weight: 600;
     line-height: 1; letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums; margin: 0.25rem 0 0;
   }
-  .readout-value small { font-size: 0.9375rem; font-weight: 400; opacity: 0.6; margin-left: 0.4rem; }
-  .readout-value .floor { font-size: 1.5rem; opacity: 0.7; margin-right: 0.2rem; }
-  .readout-idle { font-family: var(--mono); font-size: 0.9375rem; color: var(--muted); margin: 0.25rem 0 0; }
+  .readout-value small { font-size: 0.875rem; font-weight: 400; opacity: 0.6; margin-left: 0.4rem; }
+  .readout-value .floor { font-size: 1.375rem; opacity: 0.7; margin-right: 0.2rem; }
+  .readout-idle { font-family: var(--mono); font-size: 0.875rem; color: var(--muted); margin: 0.25rem 0 0; }
 
   /* ---- fix strip ---------------------------------------------- */
   .fix-strip {
@@ -167,25 +200,27 @@
     border: 1px solid var(--rule); border-radius: 2px;
     background: transparent; color: var(--muted);
     font: 600 0.8125rem/1 var(--sans);
-    letter-spacing: 0.06em; text-transform: uppercase;
-    margin-bottom: 0.5rem;
+    letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.5rem;
   }
   #penaltyBtn:disabled { opacity: 0.3; }
-  #penaltyBtn[data-strokes="1"],
-  #penaltyBtn[data-strokes="2"] {
+  #penaltyBtn[data-strokes="1"], #penaltyBtn[data-strokes="2"] {
     background: var(--penalty); border-color: var(--penalty); color: var(--paper);
   }
 
-  /* ---- secondary actions -------------------------------------- */
-  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 1.75rem; }
+  /* ---- end-of-hole + undo -------------------------------------- */
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .actions.three { grid-template-columns: 1fr 1fr; }
   .actions button {
-    padding: 0.875rem;
+    padding: 0.875rem 0.5rem;
     border: 1px solid var(--rule); border-radius: 2px;
     background: transparent; color: var(--muted);
     font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase;
   }
   .actions button:disabled { opacity: 0.3; }
+  #holedBtn:not(:disabled) { color: var(--good); border-color: var(--good); }
+  #pickedUpBtn:not(:disabled) { color: var(--poor); border-color: var(--poor); }
   #undoBtn:not(:disabled) { color: var(--poor); border-color: var(--poor); }
+  .actions.solo { grid-template-columns: 1fr; margin-bottom: 1.75rem; }
 
   /* ---- shot log ------------------------------------------------ */
   .log { list-style: none; margin: 0; padding: 0; }
@@ -203,9 +238,29 @@
   .log .pending { color: var(--muted); font-weight: 400; }
   .log .floor { color: var(--penalty); }
   .log .void { color: var(--poor); font-weight: 400; }
-  .log li.is-holed .club-name { color: var(--muted); font-weight: 400; }
+  .log li.is-end .club-name { color: var(--muted); font-weight: 400; }
 
   .empty { color: var(--muted); font-size: 0.875rem; padding: 1rem 0; }
+
+  /* ---- start screen ------------------------------------------- */
+  .start h1 { font-size: 1.5rem; letter-spacing: -0.02em; margin: 0.25rem 0 0.5rem; }
+  .start > p { color: var(--muted); font-size: 0.9375rem; margin: 0 0 1.25rem; }
+  .hole-pick { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .hole-pick input {
+    width: 4.5rem; padding: 0.75rem;
+    border: 1px solid var(--rule); border-radius: 2px;
+    font-family: var(--mono); font-size: 1.25rem; text-align: center;
+    background: var(--paper); color: var(--ink);
+  }
+  .hole-pick label { font-size: 0.8125rem; color: var(--muted); }
+  .start-choice {
+    display: block; width: 100%; padding: 1.25rem; margin-bottom: 0.75rem;
+    border: 2px solid var(--ink); border-radius: 2px;
+    background: var(--paper); text-align: left;
+  }
+  .start-choice strong { display: block; font-size: 1.0625rem; }
+  .start-choice span { color: var(--muted); font-size: 0.8125rem; }
+  .start-choice:active { background: var(--rule); }
 
   /* ---- rounds + data ------------------------------------------- */
   .rounds { list-style: none; margin: 0 0 1.5rem; padding: 0; }
@@ -218,10 +273,8 @@
   .rounds .date { font-weight: 600; }
   .rounds .meta { color: var(--muted); font-size: 0.75rem; }
   .rounds .meta.is-sim { color: var(--sim); }
-  .rounds .del {
-    background: none; border: none; padding: 0 0 0 0.5rem;
-    color: var(--muted); font-size: 1rem; line-height: 1;
-  }
+  .rounds .meta.is-synth { color: var(--poor); }
+  .rounds .del { background: none; border: none; padding: 0 0 0 0.5rem; color: var(--muted); font-size: 1rem; }
 
   .data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
   .data-actions button, .data-actions label {
@@ -229,8 +282,7 @@
     padding: 0.9375rem 0.5rem;
     border: 1px solid var(--ink); border-radius: 2px;
     background: transparent; color: var(--ink);
-    font: 600 0.75rem/1 var(--sans);
-    letter-spacing: 0.06em; text-transform: uppercase;
+    font: 600 0.75rem/1 var(--sans); letter-spacing: 0.06em; text-transform: uppercase;
     cursor: pointer;
   }
   #exportBtn { background: var(--ink); color: var(--paper); }
@@ -239,134 +291,260 @@
 
   .toast {
     margin-top: 0.875rem; padding: 0.75rem;
-    border-left: 3px solid var(--good);
-    background: rgba(47,107,55,0.08);
+    border-left: 3px solid var(--good); background: rgba(47,107,55,0.08);
     font-family: var(--mono); font-size: 0.8125rem;
   }
   .toast.is-bad { border-left-color: var(--poor); background: rgba(168,80,26,0.08); }
-
   .fineprint { color: var(--muted); font-size: 0.75rem; line-height: 1.5; margin: 1rem 0 0; }
 
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  /* ---- manual / sim entry ------------------------------------- */
+  .manual-entry {
+    display: grid; grid-template-columns: 1fr 1fr auto;
+    gap: 0.75rem; align-items: end; margin-bottom: 1rem;
+  }
+  .num-field { display: flex; flex-direction: column; gap: 0.375rem; }
+  .num-field span {
+    font: 600 0.6875rem/1 var(--sans);
+    letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+  }
+  .num-field input {
+    padding: 0.875rem;
+    border: 1px solid var(--rule); border-radius: 2px;
+    font-family: var(--mono); font-size: 1.5rem; font-weight: 600;
+    text-align: center; background: var(--paper); color: var(--ink);
+    width: 100%;
+  }
+  .num-field input:focus { outline: 2px solid var(--sim); border-color: var(--sim); }
+  .manual-entry .unit { color: var(--muted); font-family: var(--mono); font-size: 0.8125rem; padding-bottom: 1rem; }
+
+  .capture-manual {
+    display: block; width: 100%; padding: 1.25rem;
+    border: none; border-radius: 2px;
+    background: var(--sim); color: var(--paper);
+    font: 700 1rem/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+  .capture-manual:active { transform: translateY(1px); }
+  .capture-manual:disabled { background: var(--rule); color: var(--muted); }
+  .manual-hint { color: var(--muted); font-size: 0.8125rem; margin: 0 0 1.5rem; font-family: var(--mono); }
+  .log .total { color: var(--muted); }
+
 </style>
 </head>
 <body>
 
-  <!-- IDLE: start a round, review history, move data around -->
-  <section class="start" id="startScreen" hidden>
-    <p class="eyebrow">New round</p>
-    <h1>Where are you playing?</h1>
-    <p>Set once. Every shot in this round inherits it.</p>
+<!-- IDLE -->
+<section class="start" id="startScreen" hidden>
+  <p class="eyebrow">New round</p>
+  <h1>Where are you playing?</h1>
+  <p>Set once. Every shot in this round inherits it.</p>
 
-    <button class="start-choice" data-source="real">
-      <strong>Real course</strong>
-      <span>Wind, weather, actual lies</span>
-    </button>
-    <button class="start-choice" data-source="sim">
-      <strong>Simulator</strong>
-      <span>Flagged separately. Filter or discard later.</span>
-    </button>
+  <div class="hole-pick" id="holePick">
+    <input type="number" id="startHole" min="1" max="18" value="1">
+    <label>Starting hole. Ending a hole advances it, and 18 wraps to 1 — so a shotgun start just works.</label>
+  </div>
 
-    <hr>
+  <button class="start-choice" data-source="real" data-mode="gps">
+    <strong>Real course</strong>
+    <span>GPS tracks every shot. Wind, weather, actual lies.</span>
+  </button>
+  <button class="start-choice" data-source="sim" data-mode="manual">
+    <strong>Simulator</strong>
+    <span>Type carry + total off the screen. No GPS. Kept separate.</span>
+  </button>
 
-    <p class="eyebrow">Rounds</p>
-    <ul class="rounds" id="rounds"></ul>
-    <p class="empty" id="roundsEmpty">Nothing logged yet.</p>
+  <hr>
 
-    <p class="eyebrow">Data</p>
-    <div class="data-actions">
-      <button id="exportBtn" disabled>Export JSON</button>
-      <label for="importInput">Import JSON</label>
-      <input type="file" id="importInput" accept="application/json,.json">
-    </div>
-    <p class="toast" id="toast" hidden></p>
+  <p class="eyebrow">Rounds</p>
+  <ul class="rounds" id="rounds"></ul>
+  <p class="empty" id="roundsEmpty">Nothing logged yet.</p>
 
-    <p class="fineprint">
-      Rounds live in this browser's storage on this phone. Clearing site data
-      erases them. Export after every round and keep the file somewhere real.
-    </p>
-  </section>
+  <p class="eyebrow">Data</p>
+  <div class="data-actions">
+    <button id="exportBtn" disabled>Export JSON</button>
+    <label for="importInput">Import JSON</label>
+    <input type="file" id="importInput" accept="application/json,.json">
+  </div>
+  <p class="toast" id="toast" hidden></p>
 
-  <!-- ACTIVE ROUND -->
-  <section id="roundScreen" hidden>
-    <div class="round-bar">
-      <span class="round-bar-left">
-        <span class="tag" id="sourceTag">REAL</span>
-        <span class="strokes" id="strokes">0 strokes</span>
-      </span>
-      <button class="link-btn" id="endBtn">End round</button>
-    </div>
+  <p class="fineprint" id="refStatus">Loading course and club table&hellip;</p>
+  <p class="fineprint">
+    Rounds live in this browser's storage on this phone. Clearing site data
+    erases them. Export after every round and keep the file somewhere real.
+  </p>
+</section>
 
-    <div class="readout" id="readout">
-      <p class="eyebrow" id="readoutLabel">Last shot</p>
-      <p class="readout-idle" id="readoutIdle">Tap the club in your hand.</p>
-      <p class="readout-value" id="readoutValue" hidden></p>
-    </div>
+<!-- MANUAL / SIMULATOR ROUND -->
+<section id="manualScreen" hidden>
+  <div class="round-bar">
+    <span class="round-bar-left">
+      <span class="tag is-sim" id="manualTag">SIMULATOR</span>
+      <span class="strokes" id="manualCount">0 shots</span>
+    </span>
+    <button class="link-btn" id="manualEndBtn">End session</button>
+  </div>
 
-    <p class="fix-strip">
-      <span class="dot" id="dot"></span>
-      <span id="acc">waiting for satellites</span>
-    </p>
+  <!--
+    No GPS, no map, no nudge, no penalties, no hole tracking. Indoors
+    none of that applies. A sim shot is just a club and two numbers off
+    the screen. Carry is the honest one; total includes the mat bounce,
+    which is exactly why sim data is segmented from real.
+  -->
+  <p class="eyebrow">Club</p>
+  <div class="clubs" id="manualClubs"></div>
 
-    <p class="eyebrow">Club in hand — tap to mark your ball</p>
-    <div class="clubs" id="clubs"></div>
+  <div class="manual-entry">
+    <label class="num-field">
+      <span>Carry</span>
+      <input type="number" id="carryInput" inputmode="numeric" placeholder="—" min="0" max="400">
+    </label>
+    <label class="num-field">
+      <span>Total</span>
+      <input type="number" id="totalInput" inputmode="numeric" placeholder="—" min="0" max="400">
+    </label>
+    <span class="unit">yds</span>
+  </div>
 
-    <p class="eyebrow">Penalty — tags the shot you just hit</p>
-    <button id="penaltyBtn" data-strokes="0" disabled>Add penalty</button>
+  <button class="capture-manual" id="manualAddBtn" disabled>Add shot</button>
+  <p class="manual-hint" id="manualHint">Pick a club, then type what the screen shows.</p>
 
-    <div class="actions">
-      <button id="undoBtn" disabled>Undo last</button>
-      <button id="holedBtn" disabled>Holed out</button>
-    </div>
+  <div class="actions solo">
+    <button id="manualUndoBtn" disabled>Undo last</button>
+  </div>
 
-    <p class="eyebrow">This round</p>
-    <ul class="log" id="log"></ul>
-    <p class="empty" id="empty">No shots yet. Stand at your ball and tap your club.</p>
-  </section>
+  <p class="eyebrow">This session</p>
+  <ul class="log" id="manualLog"></ul>
+  <p class="empty" id="manualEmpty">No shots yet.</p>
+</section>
+
+<!-- ACTIVE ROUND -->
+<section id="roundScreen" hidden>
+  <div class="round-bar">
+    <span class="round-bar-left">
+      <span class="tag" id="sourceTag">REAL</span>
+      <span class="strokes" id="strokes">0 swings</span>
+    </span>
+    <button class="link-btn" id="endBtn">End round</button>
+  </div>
+
+  <button class="hole-strip" id="holeStrip">
+    <span class="n" id="holeNum">1</span>
+    <span class="label">hole</span>
+    <span class="tap">tap to correct</span>
+  </button>
+
+  <div class="nudge is-quiet" id="nudge">
+    <p class="eyebrow">Before you swing</p>
+    <p class="quiet" id="nudgeQuiet">Waiting for a fix&hellip;</p>
+    <p class="verdict" id="nudgeVerdict" hidden></p>
+    <div id="nudgeDetail"></div>
+  </div>
+
+  <div class="readout" id="readout">
+    <p class="eyebrow" id="readoutLabel">Last shot</p>
+    <p class="readout-idle" id="readoutIdle">Tap the club in your hand.</p>
+    <p class="readout-value" id="readoutValue" hidden></p>
+  </div>
+
+  <p class="fix-strip">
+    <span class="dot" id="dot"></span>
+    <span id="acc">waiting for satellites</span>
+  </p>
+
+  <p class="eyebrow">Club in hand — tap to mark your ball</p>
+  <div class="clubs" id="clubs"></div>
+
+  <p class="eyebrow">Penalty — tags the shot you just hit</p>
+  <button id="penaltyBtn" data-strokes="0" disabled>Add penalty</button>
+
+  <p class="eyebrow" style="margin-top:1.25rem">End of hole</p>
+  <div class="actions">
+    <button id="holedBtn" disabled>Holed out</button>
+    <button id="pickedUpBtn" disabled>Picked up</button>
+  </div>
+  <div class="actions solo">
+    <button id="undoBtn" disabled>Undo last</button>
+  </div>
+
+  <p class="eyebrow">This round</p>
+  <ul class="log" id="log"></ul>
+  <p class="empty" id="empty">No shots yet. Stand at your ball and tap your club.</p>
+</section>
 
 <script>
 "use strict";
 
 /* ============================================================
-   [1] THE SCHEMA — and its migrations
+   SCHEMA v5
 
-   round = { id, startedAt, endedAt, source: "real"|"sim", shots: [] }
-   shot  = { lat, lng, accuracy, at, club: "7i"|null, penaltyStrokes: 0|1|2 }
+   round = { id, startedAt, endedAt, source, mode, startHole, shots: [] }
 
-   Absent by design: distance, hazard type, "was this a replay".
-   All derivable. Never store what you can compute — the moment a
-   stored copy disagrees with the raw data, you have two truths.
+   mode = "gps"    -> outdoor. shots carry lat/lng, measured by GPS.
+          "manual" -> simulator. shots carry carry+total, typed from
+                      the screen. No positions, no penalties, no holes.
 
-   round.id is a timestamp, which makes it a stable primary key.
-   That is what lets import merge instead of duplicate.
+   gps shot    = { lat, lng, accuracy, at, club, penaltyStrokes, holeEnd? }
+   manual shot = { carry, total, at, club }
+
+   Why two shapes: indoors there is nothing to measure. A launch
+   monitor hands you carry and total directly and exactly. Outdoors
+   GPS sees only total, and carry is a guess. Different instruments,
+   different truths — so sim data is tagged and kept separable rather
+   than blended into your outdoor distances. A topped ball scuttles on
+   turf but catches the mat bounce on a sim, so sim mishits read
+   systematically kinder. That bias is the whole reason to segment.
+
+   Absent by design: distance, hazard type, replay flag, current hole.
+   All derived. Never store what you can compute.
    ============================================================ */
 
 const STORAGE_KEY = "shotlog:v1";
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 5;
+const HOLES_PER_ROUND = 18;
 
-const BAG = ["Dr","3w","5w","4h","5i","6i","7i","8i","9i","PW","GW","SW","LW","Putt","?"];
+const COURSE_URL = "course.json";
+const CLUBS_URL = "club-table-prior.json";
+const CACHE_COURSE = "shotlog:course";
+const CACHE_CLUBS = "shotlog:clubs";
 
-// A display heuristic, never written to storage. Python re-decides later.
+const BAG = ["Dr","3w","5h","3i","6i","7i","8i","9i","P","S","LW","Putt","?"];
+
 const REPLAY_THRESHOLD_YARDS = 20;
+const CLEAR_MARGIN_YARDS = 8;
+const LAYUP_MARGIN_YARDS = 10;
 
 const EARTH_RADIUS_M = 6371000;
+const M_PER_DEG_LAT = 111320;
 const M_TO_YARDS = 1.09361;
+
+const Z20 = -0.8416;   // short tail: you reach at least this far ~80% of the time
+const Z80 =  0.8416;   // long tail:  you exceed this only ~20% of the time
 
 let db = null;
 let currentFix = null;
+let course = null;
+let clubTable = null;
+
+/* ---- migrations ------------------------------------------------ */
 
 function migrate(data) {
   if (data.schemaVersion === SCHEMA_VERSION) return data;
 
-  data.rounds.forEach(round =>
+  data.rounds.forEach(round => {
+    round.startHole ??= 1;                             // v3 had no hole tracking
+    round.mode ??= "gps";                              // v4 and earlier were all GPS
     round.shots.forEach(shot => {
       shot.penaltyStrokes ??= 0;                       // v1 had no penalties
       if (shot.outcome) {                              // v2 stored a hazard type
         if (shot.outcome !== "in_play") shot.penaltyStrokes ||= 1;
         delete shot.outcome;
       }
-    })
-  );
+      // v3's club:null always meant a hole-out. Say so explicitly.
+      if (shot.club === null) shot.holeEnd ??= "holed";
+    });
+  });
 
   data.schemaVersion = SCHEMA_VERSION;
   return data;
@@ -375,9 +553,8 @@ function migrate(data) {
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return { schemaVersion: SCHEMA_VERSION, rounds: [] };
-  try {
-    return migrate(JSON.parse(raw));
-  } catch (err) {
+  try { return migrate(JSON.parse(raw)); }
+  catch (err) {
     console.error("Corrupt storage, starting fresh:", err);
     return { schemaVersion: SCHEMA_VERSION, rounds: [] };
   }
@@ -387,55 +564,312 @@ const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 const activeRound = () => db.rounds.find(r => !r.endedAt) || null;
 const lastShot = round => round.shots[round.shots.length - 1] ?? null;
 
+/* ---- reference data: fetch once, cache forever ------------------
+   The course and club table are small, public, and change rarely.
+   Fetch them when there's signal; fall back to the cached copy when
+   there isn't. A round on a dead spot still gets its nudge.
+   --------------------------------------------------------------- */
+
+async function loadRef(url, cacheKey) {
+  try {
+    const res = await fetch(url, { cache: "no-cache" });
+    if (!res.ok) throw new Error(res.status);
+    const data = await res.json();
+    localStorage.setItem(cacheKey, JSON.stringify(data));
+    return { data, fresh: true };
+  } catch (err) {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) return { data: JSON.parse(cached), fresh: false };
+    return { data: null, fresh: false };
+  }
+}
+
+async function loadRefData() {
+  const [c, k] = await Promise.all([
+    loadRef(COURSE_URL, CACHE_COURSE),
+    loadRef(CLUBS_URL, CACHE_CLUBS)
+  ]);
+  course = c.data;
+  clubTable = k.data ? bothTails(k.data) : null;
+
+  const el = document.getElementById("refStatus");
+  if (!course || !clubTable) {
+    el.textContent = "No course or club table found. Logging works; the nudge won't.";
+  } else {
+    el.textContent = course.name + " \u00B7 " + Object.keys(clubTable).length +
+      " clubs \u00B7 " + (c.fresh ? "fresh" : "cached");
+  }
+  renderNudge();
+}
+
+/* ---- geometry --------------------------------------------------- */
+
+function haversineYards(a, b) {
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2
+          + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h)) * M_TO_YARDS;
+}
+
+/* Lat/lng are ANGLES. A degree of longitude is 111km at the equator
+   and zero at the pole, so you cannot do plane geometry on them.
+   Flatten to metres around a local origin first. Over one golf hole
+   the error is millimetres.
+
+   (Haversine is fine for point-to-point. Line-vs-polygon needs a plane.) */
+function projector(lat0, lng0) {
+  const mLng = M_PER_DEG_LAT * Math.cos(lat0 * Math.PI / 180);
+  return (lat, lng) => [(lng - lng0) * mLng, (lat - lat0) * M_PER_DEG_LAT];
+}
+
+function segIntersectT(p, q, a, b) {
+  const [px, py] = p, [qx, qy] = q, [ax, ay] = a, [bx, by] = b;
+  const rx = qx - px, ry = qy - py, sx = bx - ax, sy = by - ay;
+  const denom = rx * sy - ry * sx;
+  if (Math.abs(denom) < 1e-12) return null;          // parallel
+  const t = ((ax - px) * sy - (ay - py) * sx) / denom;
+  const u = ((ax - px) * ry - (ay - py) * rx) / denom;
+  return (t >= 0 && t <= 1 && u >= 0 && u <= 1) ? t : null;
+}
+
+function crossings(ball, green, polygon, toXY) {
+  const p = toXY(...ball), q = toXY(...green);
+  const pts = polygon.map(([la, ln]) => toXY(la, ln));
+  const ts = [];
+  for (let i = 0; i < pts.length; i++) {
+    const t = segIntersectT(p, q, pts[i], pts[(i + 1) % pts.length]);
+    if (t !== null) ts.push(t);
+  }
+  return ts.sort((a, b) => a - b);
+}
+
+const yardsBetween = (a, b, toXY) => {
+  const [ax, ay] = toXY(...a), [bx, by] = toXY(...b);
+  return Math.hypot(bx - ax, by - ay) * M_TO_YARDS;
+};
+
+function bothTails(table) {
+  const out = {};
+  for (const [name, c] of Object.entries(table.clubs)) {
+    if (name === "Putt" || name === "?") continue;
+    out[name] = {
+      safe: c.typical + Z20 * c.sd,   // plan a carry with this
+      long: c.typical + Z80 * c.sd,   // plan a lay-up with this
+      typical: c.typical
+    };
+  }
+  return out;
+}
+
 /* ============================================================
-   [2] EXPORT AND IMPORT — the safety net
+   THE NUDGE
 
-   Export: stringify the db, wrap it in a Blob, point an object URL
-   at it, click an invisible <a download>. Nothing uploads. There is
-   no server. The file is yours the moment it hits Downloads.
+   Pair the crossings. Entering and leaving are a pair; each pair is
+   one wet stretch. Taking first-and-last instead would treat a creek
+   you run alongside as one enormous lake and count the dry land
+   between its bends as water.
 
-   Import: read the file, migrate it (old exports are still valid
-   files), then MERGE BY ROUND ID. Importing the same file twice
-   changes nothing. That property is idempotence, and designing for
-   it now is how you avoid owning eleven copies of Tuesday.
-
-   Conflict rule: the round already on this device wins. An import
-   can only ADD rounds, never silently overwrite one you have been
-   adding shots to.
+   Only the FIRST stretch is a decision. Everything beyond it is a
+   problem you only get to have if you clear this one.
    ============================================================ */
 
+function computeNudge(ball, hole, clubs) {
+  if (!hole || !hole.green) return { kind: "no_data" };
+
+  const green = [hole.green.lat, hole.green.lng];
+  const toXY = projector(...ball);
+  const toGreen = yardsBetween(ball, green, toXY);
+
+  const wet = [];
+  for (const hz of hole.hazards) {
+    const ts = crossings(ball, green, hz.polygon, toXY);
+    if (ts.length % 2 === 1) return { kind: "in_water", toGreen };
+    for (let i = 0; i < ts.length; i += 2) wet.push([ts[i] * toGreen, ts[i + 1] * toGreen]);
+  }
+  if (!wet.length) return { kind: "clear", toGreen };
+
+  wet.sort((a, b) => a[0] - b[0]);
+  const merged = [wet[0].slice()];
+  for (const [s, e] of wet.slice(1)) {
+    const last = merged[merged.length - 1];
+    if (s <= last[1] + 1) last[1] = Math.max(last[1], e);
+    else merged.push([s, e]);
+  }
+
+  const [near, far] = merged[0];
+  const carryNeeded = far + CLEAR_MARGIN_YARDS;
+  const layupLimit = near - LAYUP_MARGIN_YARDS;
+  const windowEnd = merged.length > 1 ? merged[1][0] - LAYUP_MARGIN_YARDS : Infinity;
+
+  const order = Object.entries(clubs).sort((a, b) => b[1].safe - a[1].safe);
+
+  // Must clear the far edge on a BAD strike, and stay short of the
+  // next water on a GOOD one. Both tails.
+  const clearing = order.filter(([, c]) => c.safe >= carryNeeded && c.long <= windowEnd);
+  const reckless = order.filter(([, c]) => c.safe >= carryNeeded);
+  const layups   = order.filter(([, c]) => c.long <= layupLimit);
+
+  return {
+    kind: clearing.length ? "go" : "layup",
+    toGreen, merged, carryNeeded, layupLimit, windowEnd,
+    club: clearing[0] ?? null,
+    reckless: (!clearing.length && reckless.length) ? reckless[0] : null,
+    best: order[0],
+    layup: layups[0] ?? null
+  };
+}
+
+/* ---- hole tracking ---------------------------------------------- */
+
+const wrapHole = n => ((n - 1) % HOLES_PER_ROUND + HOLES_PER_ROUND) % HOLES_PER_ROUND + 1;
+const holesEnded = round => round.shots.filter(s => s.holeEnd).length;
+const currentHole = round => wrapHole(round.startHole + holesEnded(round));
+
+/* Correcting the number rewrites startHole so the derivation still
+   holds. There is exactly one source of truth, and it isn't the label. */
+function setHole(target) {
+  const round = activeRound();
+  if (!round) return;
+  round.startHole = wrapHole(target - holesEnded(round));
+  save();
+  render();
+}
+
+/* ---- capture ----------------------------------------------------- */
+
+function capture(club, holeEnd) {
+  const round = activeRound();
+  if (!round || !currentFix) return;
+
+  const prev = lastShot(round);
+  const shot = {
+    lat: currentFix.latitude,
+    lng: currentFix.longitude,
+    accuracy: currentFix.accuracy,
+    club,
+    penaltyStrokes: 0,
+    at: new Date().toISOString()
+  };
+  if (holeEnd) shot.holeEnd = holeEnd;
+
+  round.shots.push(shot);
+  save();
+
+  if (navigator.vibrate) navigator.vibrate(25);
+
+  if (prev && prev.club !== null) showResult(prev, distanceFor(prev, shot));
+  else if (holeEnd) showIdle(holeEnd === "holed" ? "Holed out." : "Picked up. Score is a floor.");
+  else showIdle("Tracking " + club + "\u2026");
+
+  render();
+}
+
+function cyclePenalty() {
+  const round = activeRound();
+  const shot = round && lastShot(round);
+  if (!shot || shot.club === null) return;
+
+  shot.penaltyStrokes = (shot.penaltyStrokes + 1) % 3;
+  save();
+  if (navigator.vibrate) navigator.vibrate(shot.penaltyStrokes ? [20, 40, 20] : 15);
+
+  showIdle(
+    shot.penaltyStrokes === 0 ? "Cleared. " + shot.club + " back in play."
+    : shot.penaltyStrokes === 1 ? shot.club + " +1. Play on, then tap your club."
+    : shot.club + " +2 (lateral relief)."
+  );
+  render();
+}
+
+function undo() {
+  const round = activeRound();
+  if (!round || !round.shots.length) return;
+  const dropped = round.shots.pop();
+  save();
+  showIdle("Removed " + (dropped.club ?? dropped.holeEnd ?? "mark") + ".");
+  render();
+}
+
+/* ---- distance: three kinds of truth ------------------------------
+   measured : clean. average it.
+   floor    : penalised, played on from ahead. A lower bound.
+   unknown  : penalised, replayed from the same spot. No information.
+   ----------------------------------------------------------------- */
+
+function distanceFor(shot, next) {
+  if (shot.club === null) return { kind: "none" };
+  if (!next)              return { kind: "pending" };
+  const yards = haversineYards(shot, next);
+  if (shot.penaltyStrokes === 0) return { kind: "measured", yards };
+  if (yards < REPLAY_THRESHOLD_YARDS) return { kind: "unknown" };
+  return { kind: "floor", yards };
+}
+
+/* ---- rounds ------------------------------------------------------ */
+
+function startRound(source, mode) {
+  const startHole = wrapHole(Number(document.getElementById("startHole").value) || 1);
+  db.rounds.push({
+    id: Date.now(),
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    source,
+    mode,
+    startHole: mode === "gps" ? startHole : null,
+    shots: []
+  });
+  save();
+  if (mode === "gps") showIdle("Tap the club in your hand.");
+  render();
+}
+
+function endRound() {
+  const round = activeRound();
+  if (!round) return;
+  if (!confirm("End this round? Shots are kept.")) return;
+  round.endedAt = new Date().toISOString();
+  save();
+  render();
+}
+
+function deleteRound(id) {
+  if (!confirm("Delete this round permanently? Export first if unsure.")) return;
+  db.rounds = db.rounds.filter(r => r.id !== id);
+  save();
+  render();
+}
+
+/* ---- export / import --------------------------------------------- */
+
 function exportJson() {
-  const stamp = new Date().toISOString().slice(0, 10);   // YYYY-MM-DD
+  const stamp = new Date().toISOString().slice(0, 10);
   const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-
   const a = document.createElement("a");
   a.href = url;
   a.download = "shotlog-" + stamp + ".json";
   a.click();
-
-  URL.revokeObjectURL(url);   // hand the memory back
+  URL.revokeObjectURL(url);
   toast(db.rounds.length + " round(s) exported.");
 }
 
+/* Merge by round id. Importing the same file twice changes nothing —
+   that property is idempotence, and it is how you avoid owning eleven
+   copies of Tuesday. The round already on this device always wins. */
 async function importJson(file) {
   try {
     const incoming = migrate(JSON.parse(await file.text()));
     if (!Array.isArray(incoming.rounds)) throw new Error("no rounds array");
-
     const known = new Set(db.rounds.map(r => r.id));
     const fresh = incoming.rounds.filter(r => !known.has(r.id));
-
     db.rounds.push(...fresh);
     db.rounds.sort((a, b) => a.id - b.id);
     save();
     render();
-
     const skipped = incoming.rounds.length - fresh.length;
-    toast(
-      fresh.length + " round(s) added" +
-      (skipped ? ", " + skipped + " already here." : ".")
-    );
+    toast(fresh.length + " round(s) added" + (skipped ? ", " + skipped + " already here." : "."));
   } catch (err) {
     toast("Could not read that file: " + err.message, true);
   }
@@ -450,7 +884,7 @@ function toast(text, bad = false) {
   toast.timer = setTimeout(() => { el.hidden = true; }, 5000);
 }
 
-/* ---- geolocation ---------------------------------------------- */
+/* ---- geolocation -------------------------------------------------- */
 
 navigator.geolocation.watchPosition(onFix, onFixError, {
   enableHighAccuracy: true, maximumAge: 0, timeout: 15000
@@ -463,6 +897,7 @@ function onFix(position) {
   document.getElementById("dot").className =
     "dot " + (m <= 10 ? "is-good" : m <= 20 ? "" : "is-poor");
   refreshControls();
+  renderNudge();
 }
 
 function onFixError(err) {
@@ -471,104 +906,13 @@ function onFixError(err) {
   refreshControls();
 }
 
-function haversineYards(a, b) {
-  const toRad = d => d * Math.PI / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const h = Math.sin(dLat / 2) ** 2
-          + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h)) * M_TO_YARDS;
-}
-
-/* ---- capture: one tap, two jobs -------------------------------- */
-
-function capture(club) {
-  const round = activeRound();
-  if (!round || !currentFix) return;
-
-  const prev = lastShot(round);
-
-  round.shots.push({
-    lat: currentFix.latitude,
-    lng: currentFix.longitude,
-    accuracy: currentFix.accuracy,
-    club,
-    penaltyStrokes: 0,
-    at: new Date().toISOString()
-  });
-  save();
-
-  if (navigator.vibrate) navigator.vibrate(25);
-
-  if (prev && prev.club !== null) {
-    showResult(prev, distanceFor(prev, lastShot(round)));
-  } else {
-    showIdle(club === null ? "Hole complete." : "Tracking " + club + "\u2026");
-  }
-
-  render();
-}
-
-function cyclePenalty() {
-  const round = activeRound();
-  const shot = round && lastShot(round);
-  if (!shot || shot.club === null) return;
-
-  shot.penaltyStrokes = (shot.penaltyStrokes + 1) % 3;
-  save();
-
-  if (navigator.vibrate) navigator.vibrate(shot.penaltyStrokes ? [20, 40, 20] : 15);
-
-  showIdle(
-    shot.penaltyStrokes === 0 ? "Cleared. " + shot.club + " back in play."
-    : shot.penaltyStrokes === 1 ? shot.club + " +1. Play on, then tap your club."
-    : shot.club + " +2 (lateral relief)."
-  );
-
-  render();
-}
-
-function undo() {
-  const round = activeRound();
-  if (!round || round.shots.length === 0) return;
-  const dropped = round.shots.pop();
-  save();
-  showIdle("Removed " + (dropped.club ?? "hole-out") + ".");
-  render();
-}
-
-/* ============================================================
-   [3] distanceFor — three kinds of truth
-
-   measured : clean. average it, trust it.
-   floor    : penalised, played on from ahead. A LOWER BOUND on the
-              flight. Right-censored. Constrains the distribution;
-              never averaged, or the driver's mean walks into the pond.
-   unknown  : penalised, next mark is basically where you stood. You
-              replayed. The gap measures your walk back. Keep the
-              stroke, bin the distance.
-
-   The replay test is geometry, not a question.
-   ============================================================ */
-
-function distanceFor(shot, next) {
-  if (shot.club === null) return { kind: "none" };
-  if (!next)              return { kind: "pending" };
-
-  const yards = haversineYards(shot, next);
-
-  if (shot.penaltyStrokes === 0) return { kind: "measured", yards };
-  if (yards < REPLAY_THRESHOLD_YARDS) return { kind: "unknown" };
-  return { kind: "floor", yards };
-}
-
-/* ---- readout -------------------------------------------------- */
+/* ---- readout ------------------------------------------------------ */
 
 function showResult(shot, dist) {
-  const box   = document.getElementById("readout");
+  const box = document.getElementById("readout");
   const label = document.getElementById("readoutLabel");
   const value = document.getElementById("readoutValue");
-  const idle  = document.getElementById("readoutIdle");
+  const idle = document.getElementById("readoutIdle");
 
   box.className = "readout";
   clearTimeout(showResult.timer);
@@ -579,18 +923,14 @@ function showResult(shot, dist) {
     idle.hidden = false;
     idle.textContent = "Stroke counted. No distance.";
     box.classList.add("is-penal");
-    showResult.timer = setTimeout(() => { box.className = "readout"; }, 2800);
-    return;
+  } else {
+    label.textContent = shot.club + (dist.kind === "floor" ? " — penalty" : "");
+    idle.hidden = true;
+    value.hidden = false;
+    value.innerHTML = (dist.kind === "floor" ? '<span class="floor">\u2265</span>' : "")
+      + Math.round(dist.yards) + "<small>yards</small>";
+    box.classList.add(dist.kind === "floor" ? "is-penal" : "is-fresh");
   }
-
-  label.textContent = shot.club + (dist.kind === "floor" ? " — penalty" : "");
-  idle.hidden = true;
-  value.hidden = false;
-  value.innerHTML =
-    (dist.kind === "floor" ? '<span class="floor">\u2265</span>' : "") +
-    Math.round(dist.yards) + "<small>yards</small>";
-
-  box.classList.add(dist.kind === "floor" ? "is-penal" : "is-fresh");
   showResult.timer = setTimeout(() => { box.className = "readout"; }, 2800);
 }
 
@@ -603,40 +943,141 @@ function showIdle(text) {
   document.getElementById("readout").className = "readout";
 }
 
-/* ---- rounds ---------------------------------------------------- */
+/* ---- nudge rendering ---------------------------------------------
+   Silence is a feature. No water on your line means a small grey line
+   of text, not a celebration. The panel only shouts when it matters.
+   ------------------------------------------------------------------ */
 
-function startRound(source) {
-  db.rounds.push({
-    id: Date.now(),
-    startedAt: new Date().toISOString(),
-    endedAt: null,
-    source,
-    shots: []
+function renderNudge() {
+  const panel = document.getElementById("nudge");
+  const quiet = document.getElementById("nudgeQuiet");
+  const verdict = document.getElementById("nudgeVerdict");
+  const detail = document.getElementById("nudgeDetail");
+  const round = activeRound();
+
+  panel.className = "nudge is-quiet";
+  verdict.hidden = true;
+  detail.innerHTML = "";
+  quiet.hidden = false;
+
+  if (!round) return;
+  if (!currentFix) { quiet.textContent = "Waiting for a fix\u2026"; return; }
+  if (!course || !clubTable) { quiet.textContent = "No course data. Logging still works."; return; }
+
+  const hole = course.holes.find(h => h.number === currentHole(round));
+  const n = computeNudge([currentFix.latitude, currentFix.longitude], hole, clubTable);
+
+  const yds = x => Math.round(x) + " yds";
+
+  if (n.kind === "no_data")  { quiet.textContent = "Hole " + currentHole(round) + " isn't traced."; return; }
+  if (n.kind === "in_water") { quiet.textContent = "Your ball appears to be in the water. Take your drop."; return; }
+  if (n.kind === "clear")    { quiet.textContent = yds(n.toGreen) + " to the green. No water on your line."; return; }
+
+  quiet.hidden = true;
+  verdict.hidden = false;
+
+  const lines = [];
+  const span = n.merged[0];
+  lines.push(`Water ${Math.round(span[0])}\u2013${Math.round(span[1])} yds out. Carry ${Math.round(n.carryNeeded)} to clear.`);
+
+  if (n.kind === "go") {
+    panel.className = "nudge is-go";
+    verdict.textContent = "Go";
+    const [name, c] = n.club;
+    lines.push(`${name} carries ${Math.round(c.safe)} on a poor strike.`);
+    if (n.windowEnd < Infinity) {
+      lines.push(`Flushed it goes ${Math.round(c.long)} — still short of the next water.`);
+    }
+  } else {
+    panel.className = "nudge is-layup";
+    verdict.textContent = "Lay up";
+    if (n.reckless) {
+      const [name, c] = n.reckless;
+      lines.push(`${name} clears it, but flushed goes ${Math.round(c.long)} — into the water beyond.`);
+    } else {
+      const [name, c] = n.best;
+      lines.push(`Longest safe carry is ${name} at ${Math.round(c.safe)}. You don't have this shot.`);
+    }
+    if (n.layup) {
+      const [name, c] = n.layup;
+      lines.push(`Lay up: ${name}. Even flushed it stops at ${Math.round(c.long)}.`);
+      lines.push(`Leaves you ${Math.round(n.toGreen - c.typical)} in.`);
+    } else {
+      lines.push("Nothing lays up cleanly. Aim away from the water.");
+    }
+  }
+
+  for (const line of lines) {
+    const p = document.createElement("p");
+    p.className = "detail";
+    p.textContent = line;
+    detail.append(p);
+  }
+}
+
+/* ---- manual / sim entry -----------------------------------------
+   A sim shot is a club and two typed numbers. Carry is the honest
+   measurement; total carries the mat bounce. Both stored, neither
+   blended with GPS totals unless you ask.
+   ----------------------------------------------------------------- */
+
+let manualClub = null;
+
+function addManualShot() {
+  const round = activeRound();
+  if (!round || round.mode !== "manual" || !manualClub) return;
+
+  const carry = Number(document.getElementById("carryInput").value);
+  const total = Number(document.getElementById("totalInput").value);
+  if (!carry) return;                                  // carry is required; total optional
+
+  round.shots.push({
+    club: manualClub,
+    carry,
+    total: total || carry,                             // if they skip total, assume no roll
+    at: new Date().toISOString()
   });
   save();
-  showIdle("Tap the club in your hand.");
+
+  if (navigator.vibrate) navigator.vibrate(20);
+
+  // Clear for the next shot. Keep the club selected — you usually hit
+  // the same club several times in a sim session.
+  document.getElementById("carryInput").value = "";
+  document.getElementById("totalInput").value = "";
+  document.getElementById("carryInput").focus();
   render();
 }
 
-function endRound() {
+function undoManual() {
   const round = activeRound();
-  if (!round) return;
-  if (!confirm("End this round? Shots are kept.")) return;
-  round.endedAt = new Date().toISOString();
+  if (!round || !round.shots.length) return;
+  round.shots.pop();
   save();
   render();
 }
 
-function deleteRound(id) {
-  const round = db.rounds.find(r => r.id === id);
-  if (!round) return;
-  if (!confirm("Delete this round permanently? Export first if unsure.")) return;
-  db.rounds = db.rounds.filter(r => r.id !== id);
-  save();
-  render();
+function selectManualClub(name) {
+  manualClub = (manualClub === name) ? null : name;
+  document.querySelectorAll("#manualClubs .club").forEach(b =>
+    b.classList.toggle("is-last", b.textContent === manualClub)
+  );
+  refreshManual();
 }
 
-/* ---- ui -------------------------------------------------------- */
+function refreshManual() {
+  const round = activeRound();
+  const carry = Number(document.getElementById("carryInput").value);
+  document.getElementById("manualAddBtn").disabled = !(manualClub && carry);
+  document.getElementById("manualUndoBtn").disabled = !(round && round.shots.length);
+  document.getElementById("manualHint").textContent = !manualClub
+    ? "Pick a club, then type what the screen shows."
+    : !carry
+    ? "Type the carry for your " + manualClub + "."
+    : "Add shot, or keep typing.";
+}
+
+/* ---- ui ------------------------------------------------------------ */
 
 function buildClubs() {
   const wrap = document.getElementById("clubs");
@@ -648,27 +1089,27 @@ function buildClubs() {
     b.addEventListener("click", () => capture(name));
     wrap.append(b);
   });
+
+  // The manual screen gets its own grid — same clubs, no Putt or "?".
+  const mwrap = document.getElementById("manualClubs");
+  BAG.filter(c => c !== "Putt" && c !== "?").forEach(name => {
+    const b = document.createElement("button");
+    b.className = "club";
+    b.type = "button";
+    b.textContent = name;
+    b.addEventListener("click", () => selectManualClub(name));
+    mwrap.append(b);
+  });
 }
 
-/* A SWING is a shot you actually hit. A hole-out mark (club === null)
-   is a position, not a swing — nobody plays a stroke from inside the
-   cup. The putt that got the ball there was already counted.
-
-   STROKES = swings + penalties. The two numbers agree until you find
-   water, and that divergence is the point.
-
-   Note this distinction lives in the data as `club: null`, not as a
-   separate isHoleOut flag. The display just has to remember it. */
-const swingCount = round =>
-  round.shots.filter(s => s.club !== null).length;
-
+const swingCount = round => round.shots.filter(s => s.club !== null).length;
 const strokeCount = round =>
   round.shots.reduce((n, s) => n + (s.club === null ? 0 : 1) + s.penaltyStrokes, 0);
 
 function refreshControls() {
   const round = activeRound();
   const ready = Boolean(currentFix && round);
-  const shot  = round && lastShot(round);
+  const shot = round && lastShot(round);
   const taggable = Boolean(round && shot && shot.club !== null);
 
   document.querySelectorAll(".club").forEach(b => { b.disabled = !ready; });
@@ -679,8 +1120,10 @@ function refreshControls() {
   pen.dataset.strokes = String(n);
   pen.textContent = n === 0 ? "Add penalty" : "Penalty +" + n + " — tap to change";
 
-  document.getElementById("undoBtn").disabled  = !(round && round.shots.length > 0);
-  document.getElementById("holedBtn").disabled = !(ready && round && round.shots.length > 0);
+  const hasShots = Boolean(round && round.shots.length);
+  document.getElementById("undoBtn").disabled = !hasShots;
+  document.getElementById("holedBtn").disabled = !(ready && hasShots);
+  document.getElementById("pickedUpBtn").disabled = !(ready && hasShots);
 }
 
 function renderRounds() {
@@ -694,15 +1137,17 @@ function renderRounds() {
 
     const date = document.createElement("span");
     date.className = "date";
-    date.textContent = new Date(round.startedAt).toLocaleDateString(undefined, {
-      month: "short", day: "numeric"
-    });
+    date.textContent = new Date(round.startedAt)
+      .toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
     const meta = document.createElement("span");
-    meta.className = "meta" + (round.source === "sim" ? " is-sim" : "");
-    meta.textContent =
-      (round.source === "sim" ? "sim \u00B7 " : "") +
-      swingCount(round) + " swings \u00B7 " + strokeCount(round) + " strokes";
+    meta.className = "meta"
+      + (round.source === "sim" ? " is-sim" : "")
+      + (round.source === "synthetic" ? " is-synth" : "");
+    meta.textContent = round.mode === "manual"
+      ? "sim \u00B7 " + round.shots.length + " shots typed"
+      : (round.source === "synthetic" ? "synthetic \u00B7 " : "") +
+        swingCount(round) + " swings \u00B7 " + strokeCount(round) + " strokes";
 
     const del = document.createElement("button");
     del.className = "del";
@@ -716,19 +1161,64 @@ function renderRounds() {
   });
 }
 
+function renderManual(round) {
+  document.getElementById("manualCount").textContent = round.shots.length + " shots";
+
+  const log = document.getElementById("manualLog");
+  log.innerHTML = "";
+  document.getElementById("manualEmpty").hidden = round.shots.length > 0;
+
+  // Newest first — you want to see the shot you just typed.
+  [...round.shots].reverse().forEach((shot, idx) => {
+    const i = round.shots.length - idx;
+    const li = document.createElement("li");
+
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = String(i).padStart(2, "0");
+
+    const club = document.createElement("span");
+    club.className = "club-name";
+    club.textContent = shot.club;
+
+    const roll = shot.total - shot.carry;
+    const note = document.createElement("span");
+    note.className = "note";
+    note.textContent = roll > 0 ? "+" + Math.round(roll) + " roll" : "no roll";
+
+    const yds = document.createElement("span");
+    yds.className = "yds";
+    yds.innerHTML = Math.round(shot.carry) +
+      ' <span class="total">/ ' + Math.round(shot.total) + "</span>";
+
+    li.append(n, club, note, yds);
+    log.append(li);
+  });
+
+  refreshManual();
+}
+
 function render() {
   const round = activeRound();
+  const manual = round && round.mode === "manual";
+
   document.getElementById("startScreen").hidden = Boolean(round);
-  document.getElementById("roundScreen").hidden = !round;
+  document.getElementById("roundScreen").hidden = !round || manual;
+  document.getElementById("manualScreen").hidden = !manual;
 
   if (!round) { renderRounds(); return; }
+  if (manual) { renderManual(round); return; }
 
   const tag = document.getElementById("sourceTag");
-  tag.textContent = round.source === "sim" ? "SIMULATOR" : "REAL";
+  tag.textContent = round.source === "sim" ? "SIMULATOR"
+                  : round.source === "synthetic" ? "SYNTHETIC" : "REAL";
   tag.classList.toggle("is-sim", round.source === "sim");
+  tag.classList.toggle("is-synth", round.source === "synthetic");
 
   document.getElementById("strokes").textContent =
     swingCount(round) + " swings \u00B7 " + strokeCount(round) + " strokes";
+
+  document.getElementById("holeNum").textContent = currentHole(round);
 
   const last = lastShot(round);
   document.querySelectorAll(".club").forEach(b =>
@@ -742,7 +1232,7 @@ function render() {
   round.shots.forEach((shot, i) => {
     const dist = distanceFor(shot, round.shots[i + 1]);
     const li = document.createElement("li");
-    if (shot.club === null) li.classList.add("is-holed");
+    if (shot.club === null) li.classList.add("is-end");
 
     const n = document.createElement("span");
     n.className = "n";
@@ -750,61 +1240,75 @@ function render() {
 
     const club = document.createElement("span");
     club.className = "club-name";
-    club.textContent = shot.club ?? "in";
+    club.textContent = shot.club ?? (shot.holeEnd === "picked_up" ? "up" : "in");
 
     const note = document.createElement("span");
     note.className = "note" + (shot.penaltyStrokes ? " is-penal" : "");
-    note.textContent = shot.penaltyStrokes
-      ? "+" + shot.penaltyStrokes + " penalty"
+    note.textContent = shot.penaltyStrokes ? "+" + shot.penaltyStrokes + " penalty"
+      : shot.holeEnd === "picked_up" ? "picked up \u2014 score is a floor"
       : "\u00B1" + Math.round(shot.accuracy) + "m";
 
     const yds = document.createElement("span");
-    if (dist.kind === "measured") {
-      yds.className = "yds";
-      yds.textContent = Math.round(dist.yards) + " yds";
-    } else if (dist.kind === "floor") {
-      yds.className = "yds floor";
-      yds.textContent = "\u2265 " + Math.round(dist.yards) + " yds";
-    } else if (dist.kind === "unknown") {
-      yds.className = "yds void";
-      yds.textContent = "replayed";
-    } else if (dist.kind === "pending") {
-      yds.className = "yds pending";
-      yds.textContent = "in play";
-    } else {
-      yds.className = "yds pending";
-      yds.textContent = "\u2014";
-    }
+    if (dist.kind === "measured")      { yds.className = "yds";              yds.textContent = Math.round(dist.yards) + " yds"; }
+    else if (dist.kind === "floor")    { yds.className = "yds floor";        yds.textContent = "\u2265 " + Math.round(dist.yards) + " yds"; }
+    else if (dist.kind === "unknown")  { yds.className = "yds void";         yds.textContent = "replayed"; }
+    else if (dist.kind === "pending")  { yds.className = "yds pending";      yds.textContent = "in play"; }
+    else                               { yds.className = "yds pending";      yds.textContent = "\u2014"; }
 
     li.append(n, club, note, yds);
     log.append(li);
   });
 
   refreshControls();
+  renderNudge();
 }
 
-/* ---- wire it up ------------------------------------------------ */
+/* ---- wire it up ------------------------------------------------------ */
 
 db = load();
 buildClubs();
 
 document.querySelectorAll(".start-choice").forEach(btn =>
-  btn.addEventListener("click", () => startRound(btn.dataset.source))
+  btn.addEventListener("click", () => startRound(btn.dataset.source, btn.dataset.mode))
 );
 document.getElementById("penaltyBtn").addEventListener("click", cyclePenalty);
 document.getElementById("undoBtn").addEventListener("click", undo);
-document.getElementById("holedBtn").addEventListener("click", () => capture(null));
+document.getElementById("holedBtn").addEventListener("click", () => capture(null, "holed"));
+document.getElementById("pickedUpBtn").addEventListener("click", () => capture(null, "picked_up"));
 document.getElementById("endBtn").addEventListener("click", endRound);
 document.getElementById("exportBtn").addEventListener("click", exportJson);
+
+// manual / sim screen
+document.getElementById("manualAddBtn").addEventListener("click", addManualShot);
+document.getElementById("manualUndoBtn").addEventListener("click", undoManual);
+document.getElementById("manualEndBtn").addEventListener("click", endRound);
+document.getElementById("carryInput").addEventListener("input", refreshManual);
+document.getElementById("totalInput").addEventListener("input", refreshManual);
+// Enter in the total field adds the shot — fast keyboard entry.
+document.getElementById("totalInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") addManualShot();
+});
+document.getElementById("carryInput").addEventListener("keydown", e => {
+  if (e.key === "Enter") document.getElementById("totalInput").focus();
+});
+
+document.getElementById("holeStrip").addEventListener("click", () => {
+  const round = activeRound();
+  if (!round) return;
+  const answer = prompt("Which hole are you on?", currentHole(round));
+  const n = Number(answer);
+  if (n >= 1 && n <= HOLES_PER_ROUND) setHole(n);
+});
 
 document.getElementById("importInput").addEventListener("change", event => {
   const file = event.target.files[0];
   if (file) importJson(file);
-  event.target.value = "";   // let the same file be picked again
+  event.target.value = "";
 });
 
 showIdle("Tap the club in your hand.");
 render();
+loadRefData();
 </script>
 </body>
 </html>
