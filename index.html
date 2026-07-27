@@ -297,6 +297,16 @@
   .toast.is-bad { border-left-color: var(--poor); background: rgba(168,80,26,0.08); }
   .fineprint { color: var(--muted); font-size: 0.75rem; line-height: 1.5; margin: 1rem 0 0; }
 
+  .putt-btn {
+    display: block; width: 100%; padding: 1rem;
+    border: 1px solid var(--rule); border-radius: 2px;
+    background: transparent; color: var(--ink);
+    font: 600 1rem/1 var(--mono);
+    margin-bottom: 1.25rem;
+  }
+  .putt-btn:active { background: var(--ink); color: var(--paper); }
+  .putt-btn:disabled { opacity: 0.35; }
+
   @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
   /* ---- manual / sim entry ------------------------------------- */
@@ -456,6 +466,8 @@
   <p class="eyebrow">Club in hand — tap to mark your ball</p>
   <div class="clubs" id="clubs"></div>
 
+  <button id="puttBtn" class="putt-btn" disabled>Putt</button>
+
   <p class="eyebrow">Penalty — tags the shot you just hit</p>
   <button id="penaltyBtn" data-strokes="0" disabled>Add penalty</button>
 
@@ -509,7 +521,17 @@ const CLUBS_URL = "club-table-prior.json";
 const CACHE_COURSE = "shotlog:course";
 const CACHE_CLUBS = "shotlog:clubs";
 
-const BAG = ["Dr","3w","5h","3i","6i","7i","8i","9i","P","S","LW","Putt","?"];
+// Matt's bag. Two deliberate changes after round one:
+//   - "P" renamed to "PW". It sat next to "Putt" and read almost
+//     identically, so a thumb aiming for one hit the other. New shots
+//     log as "PW"; old "P" data still displays via CLUB_ALIAS below.
+//   - "Putt" moved OUT of this grid entirely (see PUTT_BUTTON). Putts
+//     are the most frequent tap and the easiest to fat-finger into a
+//     real club, so they get their own separate, deliberate button.
+const BAG = ["Dr","3w","5h","3i","6i","7i","8i","9i","PW","S","LW","?"];
+const PUTT_BUTTON = "Putt";
+const CLUB_ALIAS = { P: "PW" };   // read old "P" shots as "PW"
+const displayClub = c => (c == null ? c : (CLUB_ALIAS[c] || c));
 
 const REPLAY_THRESHOLD_YARDS = 20;
 const CLEAR_MARGIN_YARDS = 8;
@@ -675,6 +697,31 @@ function bothTails(table) {
    problem you only get to have if you clear this one.
    ============================================================ */
 
+/* Which point are you playing toward right now? On a straight hole, the
+   green. On a dogleg, the next corner you haven't rounded — the shot in
+   front of you turns the corner, it doesn't fly the flag through trees.
+
+   "Rounded" is deterministic: a corner stays a target only while it's
+   farther from the green than you are. Once you're closer to the green
+   than the corner, it's behind you. Mirrors choose_target in nudge.py. */
+function chooseTarget(ball, hole, toXY) {
+  const green = [hole.green.lat, hole.green.lng];
+  const corners = hole.corners || [];
+  if (!corners.length) return { target: green, label: "green" };
+
+  const greenXY = toXY(...green);
+  const ballXY = toXY(...ball);
+  const ballToGreen = Math.hypot(ballXY[0] - greenXY[0], ballXY[1] - greenXY[1]);
+
+  for (let i = 0; i < corners.length; i++) {
+    const cLL = [corners[i].lat, corners[i].lng];
+    const cXY = toXY(...cLL);
+    const cornerToGreen = Math.hypot(cXY[0] - greenXY[0], cXY[1] - greenXY[1]);
+    if (ballToGreen > cornerToGreen + 1) return { target: cLL, label: "corner " + (i + 1), index: i };
+  }
+  return { target: green, label: "green" };
+}
+
 function computeNudge(ball, hole, clubs) {
   if (!hole || !hole.green) return { kind: "no_data" };
 
@@ -682,13 +729,22 @@ function computeNudge(ball, hole, clubs) {
   const toXY = projector(...ball);
   const toGreen = yardsBetween(ball, green, toXY);
 
+  // Aim at the current target: next unrounded corner, or the green.
+  const { target, label } = chooseTarget(ball, hole, toXY);
+  const toTarget = yardsBetween(ball, target, toXY);
+  const dogleg = label !== "green";
+
   const wet = [];
-  for (const hz of hole.hazards) {
-    const ts = crossings(ball, green, hz.polygon, toXY);
-    if (ts.length % 2 === 1) return { kind: "in_water", toGreen };
-    for (let i = 0; i < ts.length; i += 2) wet.push([ts[i] * toGreen, ts[i + 1] * toGreen]);
+  // A traced hole may legitimately have no hazards. `for..of undefined`
+  // throws, which would silently kill renderNudge for the rest of the
+  // round — the panel just freezes on its last state. This is the bug
+  // that kept the nudge quiet on the first real round.
+  for (const hz of (hole.hazards || [])) {
+    const ts = crossings(ball, target, hz.polygon, toXY);
+    if (ts.length % 2 === 1) return { kind: "in_water", toGreen, toTarget, dogleg, label };
+    for (let i = 0; i < ts.length; i += 2) wet.push([ts[i] * toTarget, ts[i + 1] * toTarget]);
   }
-  if (!wet.length) return { kind: "clear", toGreen };
+  if (!wet.length) return { kind: "clear", toGreen, toTarget, dogleg, label };
 
   wet.sort((a, b) => a[0] - b[0]);
   const merged = [wet[0].slice()];
@@ -713,7 +769,7 @@ function computeNudge(ball, hole, clubs) {
 
   return {
     kind: clearing.length ? "go" : "layup",
-    toGreen, merged, carryNeeded, layupLimit, windowEnd,
+    toGreen, toTarget, dogleg, label, merged, carryNeeded, layupLimit, windowEnd,
     club: clearing[0] ?? null,
     reckless: (!clearing.length && reckless.length) ? reckless[0] : null,
     best: order[0],
@@ -739,9 +795,35 @@ function setHole(target) {
 
 /* ---- capture ----------------------------------------------------- */
 
+// Above this GPS error, a shot's measured distance is untrustworthy —
+// one bad fix invented a 632-yard drive in round one. We don't silently
+// drop the shot (you still need it for hole flow and score), but we warn
+// and mark it so the engine can exclude its distance later.
+const ACCURACY_GATE_M = 15;
+
 function capture(club, holeEnd) {
   const round = activeRound();
   if (!round || !currentFix) return;
+
+  const acc = currentFix.accuracy;
+  const fixAgeSec = (Date.now() - currentFixAt) / 1000;
+
+  if (fixAgeSec > 5 && !holeEnd) {
+    const ok = confirm(
+      "Your GPS fix is " + Math.round(fixAgeSec) + "s old — it may not reflect\n" +
+      "where you're standing now. Wait a moment for it to refresh, or log anyway?"
+    );
+    if (!ok) return;
+  }
+
+  if (acc > ACCURACY_GATE_M && !holeEnd) {
+    const ok = confirm(
+      "Weak GPS right now (\u00B1" + Math.round(acc) + " m).\n\n" +
+      "The distance from this shot may be way off. Log it anyway?\n" +
+      "(It'll be marked low-confidence and kept out of your club averages.)"
+    );
+    if (!ok) return;
+  }
 
   const prev = lastShot(round);
   const shot = {
@@ -752,6 +834,9 @@ function capture(club, holeEnd) {
     penaltyStrokes: 0,
     at: new Date().toISOString()
   };
+  // Flag shots taken on a weak fix so the engine can drop their distance
+  // without us losing the shot itself.
+  if (acc > ACCURACY_GATE_M) shot.lowConfidence = true;
   if (holeEnd) shot.holeEnd = holeEnd;
 
   round.shots.push(shot);
@@ -886,12 +971,19 @@ function toast(text, bad = false) {
 
 /* ---- geolocation -------------------------------------------------- */
 
+// A persistent watch keeps the fix warm. maximumAge:0 means never hand us
+// a cached position. We still stamp each fix's arrival time, because in
+// round one the watch went quiet between taps and currentFix silently went
+// stale — two shots logged 268s apart at 0.3 yds. capture() checks this.
+let currentFixAt = 0;
+
 navigator.geolocation.watchPosition(onFix, onFixError, {
   enableHighAccuracy: true, maximumAge: 0, timeout: 15000
 });
 
 function onFix(position) {
   currentFix = position.coords;
+  currentFixAt = Date.now();
   const m = Math.round(currentFix.accuracy);
   document.getElementById("acc").textContent = "\u00B1" + m + " m";
   document.getElementById("dot").className =
@@ -971,12 +1063,18 @@ function renderNudge() {
 
   if (n.kind === "no_data")  { quiet.textContent = "Hole " + currentHole(round) + " isn't traced."; return; }
   if (n.kind === "in_water") { quiet.textContent = "Your ball appears to be in the water. Take your drop."; return; }
-  if (n.kind === "clear")    { quiet.textContent = yds(n.toGreen) + " to the green. No water on your line."; return; }
+  if (n.kind === "clear") {
+    quiet.textContent = n.dogleg
+      ? "Dogleg \u2014 play to the corner, " + yds(n.toTarget) + ". No water on that line."
+      : yds(n.toGreen) + " to the green. No water on your line.";
+    return;
+  }
 
   quiet.hidden = true;
   verdict.hidden = false;
 
   const lines = [];
+  if (n.dogleg) lines.push(`Dogleg. Playing to the corner at ${Math.round(n.toTarget)} (${Math.round(n.toGreen)} to green).`);
   const span = n.merged[0];
   lines.push(`Water ${Math.round(span[0])}\u2013${Math.round(span[1])} yds out. Carry ${Math.round(n.carryNeeded)} to clear.`);
 
@@ -1001,7 +1099,7 @@ function renderNudge() {
     if (n.layup) {
       const [name, c] = n.layup;
       lines.push(`Lay up: ${name}. Even flushed it stops at ${Math.round(c.long)}.`);
-      lines.push(`Leaves you ${Math.round(n.toGreen - c.typical)} in.`);
+      lines.push(`Leaves you ${Math.round(n.toTarget - c.typical)} to the ${n.dogleg ? "corner" : "green"}.`);
     } else {
       lines.push("Nothing lays up cleanly. Aim away from the water.");
     }
@@ -1090,9 +1188,9 @@ function buildClubs() {
     wrap.append(b);
   });
 
-  // The manual screen gets its own grid — same clubs, no Putt or "?".
+  // The manual screen gets its own grid — same clubs, minus the "?" marker.
   const mwrap = document.getElementById("manualClubs");
-  BAG.filter(c => c !== "Putt" && c !== "?").forEach(name => {
+  BAG.filter(c => c !== "?").forEach(name => {
     const b = document.createElement("button");
     b.className = "club";
     b.type = "button";
@@ -1113,6 +1211,7 @@ function refreshControls() {
   const taggable = Boolean(round && shot && shot.club !== null);
 
   document.querySelectorAll(".club").forEach(b => { b.disabled = !ready; });
+  document.getElementById("puttBtn").disabled = !ready;
 
   const pen = document.getElementById("penaltyBtn");
   pen.disabled = !taggable;
@@ -1222,7 +1321,7 @@ function render() {
 
   const last = lastShot(round);
   document.querySelectorAll(".club").forEach(b =>
-    b.classList.toggle("is-last", Boolean(last) && b.textContent === last.club)
+    b.classList.toggle("is-last", Boolean(last) && b.textContent === displayClub(last.club))
   );
 
   const log = document.getElementById("log");
@@ -1240,7 +1339,7 @@ function render() {
 
     const club = document.createElement("span");
     club.className = "club-name";
-    club.textContent = shot.club ?? (shot.holeEnd === "picked_up" ? "up" : "in");
+    club.textContent = displayClub(shot.club) ?? (shot.holeEnd === "picked_up" ? "up" : "in");
 
     const note = document.createElement("span");
     note.className = "note" + (shot.penaltyStrokes ? " is-penal" : "");
@@ -1274,6 +1373,7 @@ document.querySelectorAll(".start-choice").forEach(btn =>
 document.getElementById("penaltyBtn").addEventListener("click", cyclePenalty);
 document.getElementById("undoBtn").addEventListener("click", undo);
 document.getElementById("holedBtn").addEventListener("click", () => capture(null, "holed"));
+document.getElementById("puttBtn").addEventListener("click", () => capture(PUTT_BUTTON));
 document.getElementById("pickedUpBtn").addEventListener("click", () => capture(null, "picked_up"));
 document.getElementById("endBtn").addEventListener("click", endRound);
 document.getElementById("exportBtn").addEventListener("click", exportJson);
