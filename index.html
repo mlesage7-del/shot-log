@@ -207,6 +207,21 @@
     background: var(--penalty); border-color: var(--penalty); color: var(--paper);
   }
 
+  /* ---- mishit tags: bad contact, no stroke cost ------------------ */
+  /* Deliberately visually quiet compared to Penalty — a topped 7-iron
+     doesn't cost a stroke, it just shouldn't count toward "how far does
+     my 7-iron normally go." Tags the shot already logged, same pattern
+     as Penalty: no new position captured. */
+  .mishit-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem; }
+  .mishit {
+    padding: 0.75rem 0.25rem;
+    border: 1px solid var(--rule); border-radius: 2px;
+    background: transparent; color: var(--muted);
+    font: 600 0.75rem/1 var(--sans); letter-spacing: 0.04em; text-transform: uppercase;
+  }
+  .mishit:disabled { opacity: 0.3; }
+  .mishit[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
   /* ---- end-of-hole + undo -------------------------------------- */
   .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem; }
   .actions.three { grid-template-columns: 1fr 1fr; }
@@ -471,13 +486,21 @@
   <p class="eyebrow">Penalty — tags the shot you just hit</p>
   <button id="penaltyBtn" data-strokes="0" disabled>Add penalty</button>
 
+  <p class="eyebrow" style="margin-top:0.75rem">Bad contact? Tags it, no stroke cost</p>
+  <div class="mishit-row">
+    <button class="mishit" data-kind="top" disabled>Top</button>
+    <button class="mishit" data-kind="tree" disabled>Tree</button>
+    <button class="mishit" data-kind="bunker" disabled>Bunker</button>
+  </div>
+
   <p class="eyebrow" style="margin-top:1.25rem">End of hole</p>
   <div class="actions">
     <button id="holedBtn" disabled>Holed out</button>
     <button id="pickedUpBtn" disabled>Picked up</button>
   </div>
-  <div class="actions solo">
+  <div class="actions">
     <button id="undoBtn" disabled>Undo last</button>
+    <button id="redoBtn" disabled>Redo</button>
   </div>
 
   <p class="eyebrow">This round</p>
@@ -497,7 +520,13 @@
           "manual" -> simulator. shots carry carry+total, typed from
                       the screen. No positions, no penalties, no holes.
 
-   gps shot    = { lat, lng, accuracy, at, club, penaltyStrokes, holeEnd? }
+   gps shot    = { lat, lng, accuracy, at, club, penaltyStrokes, holeEnd?, mishit? }
+
+   mishit: "top" | "tree" | "bunker" | null. Tags bad contact on the
+   shot already logged — no stroke cost, no new position. A topped
+   drive still measures a real distance, it just isn't a normal one,
+   so the engine excludes it from "how far does this club usually go"
+   without discarding the shot or blanking the club to "?".
    manual shot = { carry, total, at, club }
 
    Why two shapes: indoors there is nothing to measure. A launch
@@ -586,6 +615,36 @@ const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 const activeRound = () => db.rounds.find(r => !r.endedAt) || null;
 const lastShot = round => round.shots[round.shots.length - 1] ?? null;
 
+/* A round with no endedAt is "active" and silently absorbs every shot
+   you log next time you open the app — even days later, at a different
+   course. That's how round 2 ended up spanning July 27 to August 7:
+   never explicitly ended, so eleven days of separate golf all landed in
+   one object, and its displayed date (startedAt) stopped meaning
+   anything. Catch this once, at launch, rather than merge quietly. */
+const STALE_ROUND_HOURS = 6;
+
+function checkStaleRound() {
+  const round = activeRound();
+  if (!round) return;
+
+  const last = lastShot(round);
+  const lastAt = new Date(last ? last.at : round.startedAt);
+  const hoursSince = (Date.now() - lastAt) / 36e5;
+  if (hoursSince < STALE_ROUND_HOURS) return;
+
+  const started = new Date(round.startedAt).toLocaleDateString();
+  const ok = confirm(
+    "A round from " + started + " was never ended \u2014 its last shot was "
+    + Math.round(hoursSince) + "h ago.\n\n"
+    + "End it now so today's shots start a new round? (Nothing is deleted "
+    + "either way.)"
+  );
+  if (ok) {
+    round.endedAt = new Date().toISOString();
+    save();
+  }
+}
+
 /* ---- reference data: fetch once, cache forever ------------------
    The course and club table are small, public, and change rarely.
    Fetch them when there's signal; fall back to the cached copy when
@@ -672,13 +731,29 @@ const yardsBetween = (a, b, toXY) => {
   return Math.hypot(bx - ax, by - ay) * M_TO_YARDS;
 };
 
+/* Two DIFFERENT distances, deliberately not the same number.
+
+   safe : CARRY, p20. Clearing a hazard is a flight question — the ball
+          passes the far edge in the air or it doesn't. Rollout that
+          happens AFTER clearing is irrelevant to whether it found the
+          water. Uses the engine's carrySafe (from real or sim carry/
+          total pairs) when present; falls back to an approximation for
+          older cached tables. A shot with total 120 but carry 90 can
+          still find water sitting at 100 — that's exactly the case
+          this split exists to catch.
+
+   long : TOTAL, p80. Where the ball RESTS on a good strike. Correct for
+          "does this run into the next hazard" and "where does a
+          lay-up leave me" — both are about resting position, which is
+          what rollout actually produces. */
 function bothTails(table) {
   const out = {};
   for (const [name, c] of Object.entries(table.clubs)) {
     if (name === "Putt" || name === "?") continue;
+    const carrySafe = c.carrySafe ?? (c.typical + Z20 * c.sd) * 0.90;
     out[name] = {
-      safe: c.typical + Z20 * c.sd,   // plan a carry with this
-      long: c.typical + Z80 * c.sd,   // plan a lay-up with this
+      safe: carrySafe,                  // CARRY — use to check clearing water
+      long: c.typical + Z80 * c.sd,     // TOTAL — use to check resting position
       typical: c.typical
     };
   }
@@ -755,6 +830,16 @@ function computeNudge(ball, hole, clubs) {
   }
 
   const [near, far] = merged[0];
+
+  // Is this hazard even reachable? If nothing in the bag, on its best
+  // possible day, gets near the near edge, this was never a decision.
+  // Without this, "nothing clears the far edge" falls through to lay-up
+  // logic even when the near edge is also out of range.
+  const reachCeiling = Math.max(...Object.values(clubs).map(c => c.long));
+  if (reachCeiling < near - LAYUP_MARGIN_YARDS) {
+    return { kind: "out_of_range", toGreen, toTarget, dogleg, label, near, reachCeiling };
+  }
+
   const carryNeeded = far + CLEAR_MARGIN_YARDS;
   const layupLimit = near - LAYUP_MARGIN_YARDS;
   const windowEnd = merged.length > 1 ? merged[1][0] - LAYUP_MARGIN_YARDS : Infinity;
@@ -763,15 +848,31 @@ function computeNudge(ball, hole, clubs) {
 
   // Must clear the far edge on a BAD strike, and stay short of the
   // next water on a GOOD one. Both tails.
+  //
+  // WHICH CLUB TO RECOMMEND: `order` is longest-carry first (driver up
+  // front). Taking clearing[0] used to mean "always suggest driver
+  // whenever it clears" — even when a hybrid clears with just as much
+  // margin and far less risk. The least club that does the job is the
+  // right call: less speed, less scatter, less OB brought into play.
+  // `clearing` is a subset of the descending order, so its LAST entry
+  // is the smallest safe-carry among qualifiers.
   const clearing = order.filter(([, c]) => c.safe >= carryNeeded && c.long <= windowEnd);
   const reckless = order.filter(([, c]) => c.safe >= carryNeeded);
-  const layups   = order.filter(([, c]) => c.long <= layupLimit);
+
+  // Laying up is the opposite goal: advance as far as possible while
+  // staying safe. That's a TOTAL question, so rank candidates by
+  // `long`, not by the carry-based `safe` order everything else here
+  // uses — the two rankings can genuinely differ between clubs with
+  // different rollout fractions.
+  const layups = order
+    .filter(([, c]) => c.long <= layupLimit)
+    .sort((a, b) => b[1].long - a[1].long);
 
   return {
     kind: clearing.length ? "go" : "layup",
     toGreen, toTarget, dogleg, label, merged, carryNeeded, layupLimit, windowEnd,
-    club: clearing[0] ?? null,
-    reckless: (!clearing.length && reckless.length) ? reckless[0] : null,
+    club: clearing.length ? clearing[clearing.length - 1] : null,
+    reckless: (!clearing.length && reckless.length) ? reckless[reckless.length - 1] : null,
     best: order[0],
     layup: layups[0] ?? null
   };
@@ -840,6 +941,7 @@ function capture(club, holeEnd) {
   if (holeEnd) shot.holeEnd = holeEnd;
 
   round.shots.push(shot);
+  redoStack = [];
   save();
 
   if (navigator.vibrate) navigator.vibrate(25);
@@ -868,12 +970,46 @@ function cyclePenalty() {
   render();
 }
 
+// A round of golf where an undo tap is itself a mis-tap should cost you
+// one more tap to fix, not a re-logged shot. This stack holds exactly
+// what undo() removes, per round. It's cleared the moment a NEW shot is
+// captured — redoing after you've moved on doesn't make sense, same as
+// browser undo/redo once you've typed something new.
+let redoStack = [];
+
+/* Bad contact tags. Same pattern as Penalty: tags the shot already
+   logged, captures no new position. Unlike Penalty, this carries no
+   stroke cost — it exists purely to keep a topped drive or a tree ball
+   out of the "how far does this club normally go" average without
+   losing the shot or blanking the club to "?". Tap again to clear. */
+function toggleMishit(kind) {
+  const round = activeRound();
+  const shot = round && lastShot(round);
+  if (!shot || shot.club === null) return;
+
+  shot.mishit = (shot.mishit === kind) ? null : kind;
+  save();
+  if (navigator.vibrate) navigator.vibrate(shot.mishit ? 20 : 15);
+  render();
+}
+
 function undo() {
   const round = activeRound();
   if (!round || !round.shots.length) return;
   const dropped = round.shots.pop();
+  redoStack.push(dropped);
   save();
   showIdle("Removed " + (dropped.club ?? dropped.holeEnd ?? "mark") + ".");
+  render();
+}
+
+function redo() {
+  const round = activeRound();
+  if (!round || !redoStack.length) return;
+  const restored = redoStack.pop();
+  round.shots.push(restored);
+  save();
+  showIdle("Restored " + (restored.club ?? restored.holeEnd ?? "mark") + ".");
   render();
 }
 
@@ -1063,6 +1199,11 @@ function renderNudge() {
 
   if (n.kind === "no_data")  { quiet.textContent = "Hole " + currentHole(round) + " isn't traced."; return; }
   if (n.kind === "in_water") { quiet.textContent = "Your ball appears to be in the water. Take your drop."; return; }
+  if (n.kind === "out_of_range") {
+    quiet.textContent = "Water starts at " + Math.round(n.near) + " yds \u2014 out of range even on your "
+      + "best day (" + Math.round(n.reachCeiling) + "). Hit away.";
+    return;
+  }
   if (n.kind === "clear") {
     quiet.textContent = n.dogleg
       ? "Dogleg \u2014 play to the corner, " + yds(n.toTarget) + ". No water on that line."
@@ -1219,8 +1360,14 @@ function refreshControls() {
   pen.dataset.strokes = String(n);
   pen.textContent = n === 0 ? "Add penalty" : "Penalty +" + n + " — tap to change";
 
+  document.querySelectorAll(".mishit").forEach(b => {
+    b.disabled = !taggable;
+    b.setAttribute("aria-pressed", String(taggable && shot.mishit === b.dataset.kind));
+  });
+
   const hasShots = Boolean(round && round.shots.length);
   document.getElementById("undoBtn").disabled = !hasShots;
+  document.getElementById("redoBtn").disabled = !redoStack.length;
   document.getElementById("holedBtn").disabled = !(ready && hasShots);
   document.getElementById("pickedUpBtn").disabled = !(ready && hasShots);
 }
@@ -1344,6 +1491,7 @@ function render() {
     const note = document.createElement("span");
     note.className = "note" + (shot.penaltyStrokes ? " is-penal" : "");
     note.textContent = shot.penaltyStrokes ? "+" + shot.penaltyStrokes + " penalty"
+      : shot.mishit ? shot.mishit + " \u2014 excluded from average"
       : shot.holeEnd === "picked_up" ? "picked up \u2014 score is a floor"
       : "\u00B1" + Math.round(shot.accuracy) + "m";
 
@@ -1365,6 +1513,7 @@ function render() {
 /* ---- wire it up ------------------------------------------------------ */
 
 db = load();
+checkStaleRound();
 buildClubs();
 
 document.querySelectorAll(".start-choice").forEach(btn =>
@@ -1372,6 +1521,10 @@ document.querySelectorAll(".start-choice").forEach(btn =>
 );
 document.getElementById("penaltyBtn").addEventListener("click", cyclePenalty);
 document.getElementById("undoBtn").addEventListener("click", undo);
+document.getElementById("redoBtn").addEventListener("click", redo);
+document.querySelectorAll(".mishit").forEach(b =>
+  b.addEventListener("click", () => toggleMishit(b.dataset.kind))
+);
 document.getElementById("holedBtn").addEventListener("click", () => capture(null, "holed"));
 document.getElementById("puttBtn").addEventListener("click", () => capture(PUTT_BUTTON));
 document.getElementById("pickedUpBtn").addEventListener("click", () => capture(null, "picked_up"));
