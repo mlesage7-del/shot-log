@@ -527,18 +527,19 @@
   <h1>Club distances</h1>
   <p class="fineprint" id="statsGenerated"></p>
 
-  <p class="eyebrow" style="margin-top:1.25rem">Total (rest) vs. carry (flight)</p>
+  <p class="eyebrow" style="margin-top:1.25rem">Total (rest) vs. carry (flight) vs. contact</p>
   <table class="data-table" id="statsDistanceTable">
-    <thead><tr><th>club</th><th>n</th><th>total</th><th>SAFE</th><th>carry</th><th>carrySAFE</th></tr></thead>
+    <thead><tr><th>club</th><th>n</th><th>total</th><th>SAFE</th><th>carry</th><th>carrySAFE</th><th>mishit%</th></tr></thead>
     <tbody></tbody>
   </table>
   <p class="fineprint">SAFE = you reach at least this far ~80% of the time. carrySAFE is the
-    number the water-carry check actually uses.</p>
+    number the water-carry check actually uses. mishit% is computed live from every real
+    round on this phone &mdash; it doesn't wait on the Latitude the way the distances do.</p>
 
-  <p class="eyebrow" style="margin-top:1.5rem">Contact &mdash; how often, not how far</p>
+  <p class="eyebrow" style="margin-top:1.5rem">Contact &mdash; breakdown by kind</p>
   <div id="statsMishits"></div>
-  <p class="fineprint">Computed live from every real round on this phone. Excluded from the
-    distances above on purpose &mdash; a topped drive isn't a short drive.</p>
+  <p class="fineprint">Excluded from the distances above on purpose &mdash; a topped drive
+    isn't a short drive.</p>
 </section>
 
 <!-- DEBRIEF: one saved round, reviewed on demand -->
@@ -565,7 +566,7 @@
 
   <p class="eyebrow" style="margin-top:1.5rem">Clubs &mdash; today vs. usual</p>
   <table class="data-table" id="debriefClubTable">
-    <thead><tr><th>club</th><th>n</th><th>today</th><th>usual</th><th>diff</th></tr></thead>
+    <thead><tr><th>club</th><th>n</th><th>today</th><th>usual</th><th>diff</th><th>mishit%</th></tr></thead>
     <tbody></tbody>
   </table>
 
@@ -656,13 +657,24 @@
           "manual" -> simulator. shots carry carry+total, typed from
                       the screen. No positions, no penalties, no holes.
 
-   gps shot    = { lat, lng, accuracy, at, club, penaltyStrokes, holeEnd?, mishit? }
+   gps shot    = { lat, lng, accuracy, at, club, penaltyStrokes, holeEnd?, mishit?, fromGreen? }
 
    mishit: "top" | "tree" | "bunker" | null. Tags bad contact on the
    shot already logged — no stroke cost, no new position. A topped
    drive still measures a real distance, it just isn't a normal one,
    so the engine excludes it from "how far does this club usually go"
    without discarding the shot or blanking the club to "?".
+
+   fromGreen: true when club === "Putt". Putts use the hole's TRACED
+   GREEN position instead of a live GPS fix — accuracy near the green
+   (3-7m) is often bigger than the putt itself, so a live fix turned
+   putt-to-putt "distance" into noise, and worse, turned the approach
+   shot's distance (measured to the first putt) into noise too. The
+   green's center is fixed and precise; using it is both more accurate
+   AND instant — no GPS wait, ever, for the Putt button. Every putt on
+   a hole therefore shares identical coordinates, so distanceFor()
+   never reports a real distance for a Putt shot regardless of this
+   flag — it's here for provenance, not behavior.
    manual shot = { carry, total, at, club }
 
    Why two shapes: indoors there is nothing to measure. A launch
@@ -1048,14 +1060,35 @@ function setHole(target) {
 // and mark it so the engine can exclude its distance later.
 const ACCURACY_GATE_M = 15;
 
+/* Where does the traced green sit for the hole you're on right now?
+   null if the course isn't loaded or this hole was never traced. */
+function currentGreenPosition() {
+  const round = activeRound();
+  if (!round || !course) return null;
+  const hole = course.holes.find(h => h.number === currentHole(round));
+  return hole && hole.green ? [hole.green.lat, hole.green.lng] : null;
+}
+
 function capture(club, holeEnd) {
   const round = activeRound();
-  if (!round || !currentFix) return;
+  if (!round) return;
 
-  const acc = currentFix.accuracy;
-  const fixAgeSec = (Date.now() - currentFixAt) / 1000;
+  // Putts get a special case. GPS accuracy on the green (3-7m typically)
+  // is often bigger than the putts themselves, so a live fix turns
+  // putt-to-putt "distance" into pure noise — and worse, it turns the
+  // APPROACH shot's distance (measured to the first putt) into noise
+  // too. The green's traced center is a fixed, precise reference point;
+  // using it beats waiting on a jittery fix, and it's instant — no GPS
+  // needed at all, so the Putt button never blocks on a fix.
+  const greenPos = club === "Putt" ? currentGreenPosition() : null;
+  const usingGreen = Boolean(greenPos);
 
-  if (fixAgeSec > 5 && !holeEnd) {
+  if (!usingGreen && !currentFix) return;
+
+  const acc = usingGreen ? 0 : currentFix.accuracy;
+  const fixAgeSec = usingGreen ? 0 : (Date.now() - currentFixAt) / 1000;
+
+  if (!usingGreen && fixAgeSec > 5 && !holeEnd) {
     const ok = confirm(
       "Your GPS fix is " + Math.round(fixAgeSec) + "s old — it may not reflect\n" +
       "where you're standing now. Wait a moment for it to refresh, or log anyway?"
@@ -1063,7 +1096,7 @@ function capture(club, holeEnd) {
     if (!ok) return;
   }
 
-  if (acc > ACCURACY_GATE_M && !holeEnd) {
+  if (!usingGreen && acc > ACCURACY_GATE_M && !holeEnd) {
     const ok = confirm(
       "Weak GPS right now (\u00B1" + Math.round(acc) + " m).\n\n" +
       "The distance from this shot may be way off. Log it anyway?\n" +
@@ -1074,16 +1107,17 @@ function capture(club, holeEnd) {
 
   const prev = lastShot(round);
   const shot = {
-    lat: currentFix.latitude,
-    lng: currentFix.longitude,
-    accuracy: currentFix.accuracy,
+    lat: usingGreen ? greenPos[0] : currentFix.latitude,
+    lng: usingGreen ? greenPos[1] : currentFix.longitude,
+    accuracy: usingGreen ? 0 : currentFix.accuracy,
     club,
     penaltyStrokes: 0,
     at: new Date().toISOString()
   };
+  if (usingGreen) shot.fromGreen = true;   // this position is the traced green, not a live fix
   // Flag shots taken on a weak fix so the engine can drop their distance
   // without us losing the shot itself.
-  if (acc > ACCURACY_GATE_M) shot.lowConfidence = true;
+  if (!usingGreen && acc > ACCURACY_GATE_M) shot.lowConfidence = true;
   if (holeEnd) shot.holeEnd = holeEnd;
 
   round.shots.push(shot);
@@ -1168,6 +1202,11 @@ function redo() {
 function distanceFor(shot, next) {
   if (shot.club === null) return { kind: "none" };
   if (!next)              return { kind: "pending" };
+  // Every putt shares the same green-anchor coordinates now, so the gap
+  // to the next mark is always ~0 — accurate, but reads like a bug in
+  // the log. Putts were never meaningful distance data anyway; say so
+  // plainly instead of printing a hollow "0 yds".
+  if (shot.club === "Putt") return { kind: "putt" };
   const yards = haversineYards(shot, next);
   if (shot.penaltyStrokes === 0) return { kind: "measured", yards };
   if (yards < REPLAY_THRESHOLD_YARDS) return { kind: "unknown" };
@@ -1498,7 +1537,10 @@ function refreshControls() {
   const taggable = Boolean(round && shot && shot.club !== null);
 
   document.querySelectorAll(".club").forEach(b => { b.disabled = !ready; });
-  document.getElementById("puttBtn").disabled = !ready;
+
+  // Putts don't need a live fix — they use the traced green position,
+  // which is already sitting in memory the moment a round starts.
+  document.getElementById("puttBtn").disabled = !(round && (ready || currentGreenPosition()));
 
   const pen = document.getElementById("penaltyBtn");
   pen.disabled = !taggable;
@@ -1622,7 +1664,7 @@ function buildDebriefData(round) {
 
       const next = shots[i + 1];
       let dist = null;
-      if (next && shot.club !== null) {
+      if (next && shot.club !== null && shot.club !== "Putt") {
         const yards = haversineYards(shot, next);
         if (!shot.penaltyStrokes) dist = Math.round(yards);
         else if (yards >= REPLAY_THRESHOLD_YARDS) dist = "\u2265" + Math.round(yards);
@@ -1635,7 +1677,11 @@ function buildDebriefData(round) {
         if (shot.mishit) {
           todayMishits[clubDisp] = todayMishits[clubDisp] || {};
           todayMishits[clubDisp][shot.mishit] = (todayMishits[clubDisp][shot.mishit] || 0) + 1;
-        } else if (!shot.penaltyStrokes && next) {
+        } else if (!shot.penaltyStrokes && next && shot.club !== "Putt") {
+          // Every putt now shares the green's traced coordinates, so a
+          // "putt distance" is always ~0 — not data, just an artifact
+          // of the anchor. Excluded from the comparison table the same
+          // way the engine excludes it on the Latitude.
           const yards = haversineYards(shot, next);
           todayShots[clubDisp] = todayShots[clubDisp] || [];
           todayShots[clubDisp].push(yards);
@@ -1669,11 +1715,14 @@ function buildDebriefData(round) {
     const vals = todayShots[club];
     const todayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
     const standing = clubTableRaw && clubTableRaw.clubs[club] ? clubTableRaw.clubs[club].typical : null;
+    const bad = todayMishits[club] ? sumVals(todayMishits[club]) : 0;
+    const swings = todaySwings[club] || (vals.length + bad);
     return {
       club, n: vals.length,
       todayAvg: Math.round(todayAvg * 10) / 10,
       standing: standing != null ? Math.round(standing * 10) / 10 : null,
       diff: standing != null ? Math.round((todayAvg - standing) * 10) / 10 : null,
+      mishitBad: bad, mishitSwings: swings,
     };
   });
 
@@ -1702,25 +1751,10 @@ function openStats() {
       + " \u2014 regenerate on the Latitude after new rounds."
     : "No generation date on this table.";
 
-  const tbody = document.querySelector("#statsDistanceTable tbody");
-  tbody.innerHTML = "";
-  if (clubTableRaw) {
-    Object.entries(clubTableRaw.clubs)
-      .filter(([club]) => club !== "Putt" && club !== "?")
-      .sort((a, b) => (b[1].typical || 0) - (a[1].typical || 0))
-      .forEach(([club, c]) => {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${club}</td><td>${c.n}</td><td>${Math.round(c.typical)}</td>`
-          + `<td>${Math.round(c.safe)}</td>`
-          + `<td>${c.carryTypical != null ? Math.round(c.carryTypical) : "\u2014"}</td>`
-          + `<td>${c.carrySafe != null ? Math.round(c.carrySafe) : "\u2014"}</td>`;
-        tbody.appendChild(tr);
-      });
-  }
-
   // Mishit rates computed live, straight from every real GPS round
   // sitting in this phone's storage. No Python round-trip needed for
-  // this one — it's a plain count, not a statistical fit.
+  // this one — it's a plain count, not a statistical fit, so it's
+  // always current even when the distance table above it is stale.
   const tally = {};
   db.rounds.forEach(r => {
     if (r.source !== "real" || r.mode !== "gps") return;
@@ -1732,6 +1766,30 @@ function openStats() {
       if (shot.mishit) tally[club].bad[shot.mishit] = (tally[club].bad[shot.mishit] || 0) + 1;
     });
   });
+
+  const tbody = document.querySelector("#statsDistanceTable tbody");
+  tbody.innerHTML = "";
+  if (clubTableRaw) {
+    Object.entries(clubTableRaw.clubs)
+      .filter(([club]) => club !== "Putt" && club !== "?")
+      .sort((a, b) => (b[1].typical || 0) - (a[1].typical || 0))
+      .forEach(([club, c]) => {
+        // Merged in from the live tally, not the cached table — the
+        // distance numbers can only be as fresh as the last manual
+        // engine run, but contact rate never needs to wait on that.
+        const t = tally[club];
+        const bad = t ? sumVals(t.bad) : 0;
+        const mishitTxt = t ? Math.round(100 * bad / t.swings) + "% (" + bad + "/" + t.swings + ")" : "\u2014";
+
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${club}</td><td>${c.n}</td><td>${Math.round(c.typical)}</td>`
+          + `<td>${Math.round(c.safe)}</td>`
+          + `<td>${c.carryTypical != null ? Math.round(c.carryTypical) : "\u2014"}</td>`
+          + `<td>${c.carrySafe != null ? Math.round(c.carrySafe) : "\u2014"}</td>`
+          + `<td>${mishitTxt}</td>`;
+        tbody.appendChild(tr);
+      });
+  }
 
   const mEl = document.getElementById("statsMishits");
   mEl.innerHTML = "";
@@ -1794,9 +1852,13 @@ function renderDebriefSummary(data) {
   data.clubRows.forEach(row => {
     const diffTxt = row.diff == null ? "\u2014" : (row.diff >= 0 ? "+" : "") + row.diff;
     const diffClass = row.diff > 0 ? "pos" : row.diff < 0 ? "neg" : "";
+    const mishitTxt = row.mishitSwings
+      ? Math.round(100 * row.mishitBad / row.mishitSwings) + "% (" + row.mishitBad + "/" + row.mishitSwings + ")"
+      : "\u2014";
     const tr = document.createElement("tr");
     tr.innerHTML = `<td>${row.club}</td><td>${row.n}</td><td>${row.todayAvg}</td>`
-      + `<td>${row.standing ?? "\u2014"}</td><td class="${diffClass}">${diffTxt}</td>`;
+      + `<td>${row.standing ?? "\u2014"}</td><td class="${diffClass}">${diffTxt}</td>`
+      + `<td>${mishitTxt}</td>`;
     tbody.appendChild(tr);
   });
 
@@ -1877,7 +1939,34 @@ function drawHoleCartoon(hole) {
   const lng0 = pts.reduce((a, p) => a + p[1], 0) / pts.length;
   const toXY = projector(lat0, lng0);
 
-  const xy = pts.map(p => toXY(p[0], p[1]));
+  // Orient every hole the same way: first shot at the bottom, green at
+  // the top, regardless of the hole's true compass bearing. Without
+  // this, a hole running east-west and one running north-south look
+  // arbitrarily different call to call — there's no fixed "up." Rotate
+  // the whole local frame so the tee-to-green vector always points
+  // north, which the existing screen-flip then puts at the top.
+  const anchorFrom = hole.shots.length ? hole.shots[0] : null;
+  const anchorTo = hole.green || (hole.shots.length ? hole.shots[hole.shots.length - 1] : null);
+  let angle = 0;
+  if (anchorFrom && anchorTo) {
+    const [fx, fy] = toXY(anchorFrom.lat, anchorFrom.lng);
+    const [tx, ty] = toXY(anchorTo.lat, anchorTo.lng);
+    const bearing = Math.atan2(tx - fx, ty - fy);   // clockwise from north
+    // Rotating a vector already pointing at compass bearing θ by +θ
+    // (with this rotation-matrix convention: x=east, y=north, positive
+    // angle = counter-clockwise) aligns it with north. Getting this
+    // backwards silently flips east-running holes onto their heads
+    // while doing nothing visible to north-running ones — caught only
+    // by testing multiple bearings, not by eyeballing one hole.
+    angle = bearing;
+  }
+  const toRotatedXY = (lat, lng) => {
+    const [x, y] = toXY(lat, lng);
+    return [x * Math.cos(angle) - y * Math.sin(angle),
+            x * Math.sin(angle) + y * Math.cos(angle)];
+  };
+
+  const xy = pts.map(p => toRotatedXY(p[0], p[1]));
   const xs = xy.map(p => p[0]), ys = xy.map(p => p[1]);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const minY = Math.min(...ys), maxY = Math.max(...ys);
@@ -1886,10 +1975,10 @@ function drawHoleCartoon(hole) {
   const scale = Math.min((SIZE - 2 * PAD) / spanX, (SIZE - 2 * PAD) / spanY);
   const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
 
-  // SVG y grows downward; flip so shots visually move "away" on screen.
-  // North-up doesn't matter for a schematic — orientation is arbitrary.
+  // SVG y grows downward; flip so "north" (post-rotation, always the
+  // tee-to-green direction) reads as "up" on screen.
   const project = (lat, lng) => {
-    const [x, y] = toXY(lat, lng);
+    const [x, y] = toRotatedXY(lat, lng);
     return [SIZE / 2 + (x - cx) * scale, SIZE / 2 - (y - cy) * scale];
   };
 
@@ -2061,6 +2150,7 @@ function render() {
     note.textContent = shot.penaltyStrokes ? "+" + shot.penaltyStrokes + " penalty"
       : shot.mishit ? shot.mishit + " \u2014 excluded from average"
       : shot.holeEnd === "picked_up" ? "picked up \u2014 score is a floor"
+      : shot.fromGreen ? "green (traced)"
       : "\u00B1" + Math.round(shot.accuracy) + "m";
 
     const yds = document.createElement("span");
@@ -2068,6 +2158,7 @@ function render() {
     else if (dist.kind === "floor")    { yds.className = "yds floor";        yds.textContent = "\u2265 " + Math.round(dist.yards) + " yds"; }
     else if (dist.kind === "unknown")  { yds.className = "yds void";         yds.textContent = "replayed"; }
     else if (dist.kind === "pending")  { yds.className = "yds pending";      yds.textContent = "in play"; }
+    else if (dist.kind === "putt")     { yds.className = "yds pending";      yds.textContent = "putt"; }
     else                               { yds.className = "yds pending";      yds.textContent = "\u2014"; }
 
     li.append(n, club, note, yds);
