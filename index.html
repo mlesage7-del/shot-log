@@ -4,56 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Shot Log</title>
-
-<!--
-  ============================================================
-  PHASE 3: the nudge.
-
-  The whole app exists to say one sentence before you swing:
-  "you don't have this club, lay up." Everything else — the
-  logging, the club table, the censored penalties — exists to
-  make that sentence trustworthy.
-
-  NEW HERE
-  --------
-  1. HOLE TRACKING. You pick a starting hole. Ending a hole
-     advances it. Wraps 18 -> 1, so a shotgun start just works.
-     The number is big and tappable, because inference is right
-     nearly always and catastrophically wrong the rest of the
-     time — it would confidently advise you about the pond on 12
-     while you stand on 13.
-
-  2. PICKED UP. Same right-censoring as a wet drive, wearing
-     different clothes. Holed out = your score is known exactly.
-     Picked up = your score is a LOWER BOUND. You were lying
-     eight and hadn't finished. Recording a nine is a lie;
-     discarding it loses the fact the hole was a disaster.
-     So: record the position, tag it, keep the truth.
-
-  3. THE NUDGE. Ported from nudge.py, verified to give identical
-     answers on six holes of Glendale. It runs on your phone,
-     offline, from a cached club table. No server in the loop.
-
-  THE TWO-TAIL IDEA, WHICH IS THE ACTUAL PRODUCT
-  ----------------------------------------------
-  A club that clears water must do two things at once:
-
-      carry the far edge WHEN YOU CATCH IT BADLY   -> short tail (safe, p20)
-      stop short of the next hazard WHEN FLUSHED   -> long tail  (p80)
-
-  Same club. Same distribution. Opposite ends. Golfers get both
-  backwards simultaneously: they clear water with their best-ever
-  drive, then lay up with their average wedge.
-
-  AND THE FAR EDGE, NOT THE NEAR ONE
-  ----------------------------------
-  To be dry you must carry PAST the water. The near edge is where
-  it begins — carrying to it puts you in the pond. Near edge is
-  your lay-up limit; far edge is your required carry. Two numbers,
-  and confusing them costs a stroke every time.
-  ============================================================
--->
-
 <style>
   :root {
     --paper:   #EDEFEC;
@@ -86,12 +36,12 @@
     color: var(--muted); margin: 0 0 0.5rem;
   }
 
-  button { font-family: var(--sans); cursor: pointer; }
-  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  button, select, input { font-family: var(--sans); }
+  button { cursor: pointer; }
+  button:focus-visible, select:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
   [hidden] { display: none !important; }
   hr { border: none; border-top: 1px solid var(--rule); margin: 2rem 0 1.5rem; }
 
-  /* ---- round header ------------------------------------------ */
   .round-bar {
     display: flex; justify-content: space-between; align-items: center;
     border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule);
@@ -111,7 +61,6 @@
     color: var(--muted); font-size: 0.75rem; text-decoration: underline;
   }
 
-  /* ---- hole strip: inferred, but always overridable ----------- */
   .hole-strip {
     display: flex; align-items: baseline; gap: 0.625rem;
     width: 100%; padding: 0.5rem 0 0.875rem;
@@ -127,7 +76,6 @@
   }
   .hole-strip .tap { margin-left: auto; font-size: 0.6875rem; color: var(--muted); text-decoration: underline; }
 
-  /* ---- the nudge: the reason this app exists ------------------ */
   .nudge {
     border: 2px solid var(--rule); border-radius: 2px;
     padding: 0.875rem 1rem; margin-bottom: 1.25rem;
@@ -147,9 +95,7 @@
     font-size: 0.8125rem; line-height: 1.5;
   }
   .nudge .quiet { color: var(--muted); font-family: var(--mono); font-size: 0.8125rem; margin: 0; }
-  .nudge .water-span { font-variant-numeric: tabular-nums; }
 
-  /* ---- last-shot readout -------------------------------------- */
   .readout {
     border: 1px solid var(--rule); padding: 0.75rem 1rem;
     margin-bottom: 1rem; min-height: 4.5rem;
@@ -169,7 +115,6 @@
   .readout-value .floor { font-size: 1.375rem; opacity: 0.7; margin-right: 0.2rem; }
   .readout-idle { font-family: var(--mono); font-size: 0.875rem; color: var(--muted); margin: 0.25rem 0 0; }
 
-  /* ---- fix strip ---------------------------------------------- */
   .fix-strip {
     display: flex; align-items: center; gap: 0.5rem;
     font-family: var(--mono); font-size: 0.75rem; color: var(--muted);
@@ -179,7 +124,6 @@
   .dot.is-good { background: var(--good); }
   .dot.is-poor { background: var(--poor); }
 
-  /* ---- club grid ---------------------------------------------- */
   .clubs {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
     gap: 0.5rem; margin-bottom: 1rem;
@@ -194,7 +138,6 @@
   .club:disabled { opacity: 0.35; }
   .club.is-last { border: 2px solid var(--ink); }
 
-  /* ---- penalty ------------------------------------------------- */
   #penaltyBtn {
     display: block; width: 100%; padding: 1rem;
     border: 1px solid var(--rule); border-radius: 2px;
@@ -207,11 +150,6 @@
     background: var(--penalty); border-color: var(--penalty); color: var(--paper);
   }
 
-  /* ---- mishit tags: bad contact, no stroke cost ------------------ */
-  /* Deliberately visually quiet compared to Penalty — a topped 7-iron
-     doesn't cost a stroke, it just shouldn't count toward "how far does
-     my 7-iron normally go." Tags the shot already logged, same pattern
-     as Penalty: no new position captured. */
   .mishit-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem; }
   .mishit {
     padding: 0.75rem 0.25rem;
@@ -222,9 +160,7 @@
   .mishit:disabled { opacity: 0.3; }
   .mishit[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 
-  /* ---- end-of-hole + undo -------------------------------------- */
   .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem; }
-  .actions.three { grid-template-columns: 1fr 1fr; }
   .actions button {
     padding: 0.875rem 0.5rem;
     border: 1px solid var(--rule); border-radius: 2px;
@@ -237,7 +173,6 @@
   #undoBtn:not(:disabled) { color: var(--poor); border-color: var(--poor); }
   .actions.solo { grid-template-columns: 1fr; margin-bottom: 1.75rem; }
 
-  /* ---- shot log ------------------------------------------------ */
   .log { list-style: none; margin: 0; padding: 0; }
   .log li {
     display: grid; grid-template-columns: 2rem 3.5rem 1fr auto;
@@ -257,17 +192,24 @@
 
   .empty { color: var(--muted); font-size: 0.875rem; padding: 1rem 0; }
 
-  /* ---- start screen ------------------------------------------- */
   .start h1 { font-size: 1.5rem; letter-spacing: -0.02em; margin: 0.25rem 0 0.5rem; }
   .start > p { color: var(--muted); font-size: 0.9375rem; margin: 0 0 1.25rem; }
-  .hole-pick { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.5rem; }
-  .hole-pick input {
-    width: 4.5rem; padding: 0.75rem;
+
+  .setup-card {
+    border: 1px solid var(--rule);
+    padding: 1rem; margin-bottom: 1.25rem;
+    background: rgba(0,0,0,0.015);
+  }
+  .setup-field { margin-bottom: 0.875rem; }
+  .setup-field:last-child { margin-bottom: 0; }
+  .setup-field label { display: block; font: 600 0.6875rem/1 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.35rem; }
+  .setup-field select, .setup-field input {
+    width: 100%; padding: 0.625rem;
     border: 1px solid var(--rule); border-radius: 2px;
-    font-family: var(--mono); font-size: 1.25rem; text-align: center;
+    font-family: var(--mono); font-size: 0.9375rem;
     background: var(--paper); color: var(--ink);
   }
-  .hole-pick label { font-size: 0.8125rem; color: var(--muted); }
+
   .start-choice {
     display: block; width: 100%; padding: 1.25rem; margin-bottom: 0.75rem;
     border: 2px solid var(--ink); border-radius: 2px;
@@ -286,7 +228,6 @@
   }
   .link-row:active { background: rgba(0,0,0,0.04); }
 
-  /* ---- rounds + data ------------------------------------------- */
   .rounds { list-style: none; margin: 0 0 1.5rem; padding: 0; }
   .rounds li {
     display: grid; grid-template-columns: 1fr auto auto;
@@ -297,23 +238,22 @@
   .rounds .date { font-weight: 600; }
   .rounds .meta { color: var(--muted); font-size: 0.75rem; }
   .rounds .meta.is-sim { color: var(--sim); }
-  .rounds .meta.is-synth { color: var(--poor); }
   .rounds .del { background: none; border: none; padding: 0 0 0 0.5rem; color: var(--muted); font-size: 1rem; }
   .rounds li.tappable { cursor: pointer; }
   .rounds li.tappable .date::after { content: " \u2192"; color: var(--mark); font-weight: 400; }
 
-  .data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+  .data-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem; }
   .data-actions button, .data-actions label {
     display: flex; align-items: center; justify-content: center;
     padding: 0.9375rem 0.5rem;
     border: 1px solid var(--ink); border-radius: 2px;
     background: transparent; color: var(--ink);
     font: 600 0.75rem/1 var(--sans); letter-spacing: 0.06em; text-transform: uppercase;
-    cursor: pointer;
+    cursor: pointer; text-align: center;
   }
   #exportBtn { background: var(--ink); color: var(--paper); }
   #exportBtn:disabled { background: var(--rule); border-color: var(--rule); color: var(--muted); }
-  #importInput { position: absolute; width: 1px; height: 1px; opacity: 0; }
+  .file-input-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; }
 
   .toast {
     margin-top: 0.875rem; padding: 0.75rem;
@@ -327,15 +267,11 @@
     display: block; width: 100%; padding: 1rem;
     border: 1px solid var(--rule); border-radius: 2px;
     background: transparent; color: var(--ink);
-    font: 600 1rem/1 var(--mono);
-    margin-bottom: 1.25rem;
+    font: 600 1rem/1 var(--mono); margin-bottom: 1.25rem;
   }
   .putt-btn:active { background: var(--ink); color: var(--paper); }
   .putt-btn:disabled { opacity: 0.35; }
 
-  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-
-  /* ---- stats & debrief screens ---------------------------------- */
   .data-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.8125rem; }
   .data-table th, .data-table td { text-align: right; padding: 0.4rem 0.3rem; border-bottom: 1px solid var(--rule); }
   .data-table th:first-child, .data-table td:first-child { text-align: left; }
@@ -375,9 +311,6 @@
   .hole-nav button:disabled { opacity: 0.3; }
   .hole-nav span { font-family: var(--mono); font-size: 1.0625rem; font-weight: 600; min-width: 6rem; text-align: center; }
 
-  /* The "cartoon": a schematic hole drawn straight from course.json's
-     stored coordinates. No basemap tiles, no network, works offline
-     forever once the course file is cached — which it already is. */
   #holeCartoon {
     display: block; width: 100%; max-width: 320px; margin: 0 auto;
     background: #DCE6D5; border: 1px solid var(--rule);
@@ -397,7 +330,6 @@
   .nudge-event .tag.solid { color: var(--good); }
   .nudge-event .tag.cautious { color: var(--penalty); }
 
-  /* ---- manual / sim entry ------------------------------------- */
   .manual-entry {
     display: grid; grid-template-columns: 1fr 1fr auto;
     gap: 0.75rem; align-items: end; margin-bottom: 1rem;
@@ -427,30 +359,37 @@
   .capture-manual:active { transform: translateY(1px); }
   .capture-manual:disabled { background: var(--rule); color: var(--muted); }
   .manual-hint { color: var(--muted); font-size: 0.8125rem; margin: 0 0 1.5rem; font-family: var(--mono); }
-  .log .total { color: var(--muted); }
-
 </style>
 </head>
 <body>
 
-<!-- IDLE -->
+<!-- IDLE / START SCREEN -->
 <section class="start" id="startScreen" hidden>
   <p class="eyebrow">New round</p>
-  <h1>Where are you playing?</h1>
-  <p>Set once. Every shot in this round inherits it.</p>
+  <h1>Round Setup</h1>
 
-  <div class="hole-pick" id="holePick">
-    <input type="number" id="startHole" min="1" max="18" value="1">
-    <label>Starting hole. Ending a hole advances it, and 18 wraps to 1 — so a shotgun start just works.</label>
+  <div class="setup-card">
+    <div class="setup-field">
+      <label for="playerSelect">Player Profile</label>
+      <select id="playerSelect"></select>
+    </div>
+    <div class="setup-field">
+      <label for="courseSelect">Course</label>
+      <select id="courseSelect"></select>
+    </div>
+    <div class="setup-field">
+      <label for="startHole">Starting Hole</label>
+      <input type="number" id="startHole" min="1" max="18" value="1">
+    </div>
   </div>
 
   <button class="start-choice" data-source="real" data-mode="gps">
     <strong>Real course</strong>
-    <span>GPS tracks every shot. Wind, weather, actual lies.</span>
+    <span>GPS tracks every shot. Pure live nudge on your phone.</span>
   </button>
   <button class="start-choice" data-source="sim" data-mode="manual">
     <strong>Simulator</strong>
-    <span>Type carry + total off the screen. No GPS. Kept separate.</span>
+    <span>Type carry + total off the screen. Kept separate.</span>
   </button>
 
   <button class="link-row" id="statsLink">My club distances &amp; contact rate &rarr;</button>
@@ -461,18 +400,22 @@
   <ul class="rounds" id="rounds"></ul>
   <p class="empty" id="roundsEmpty">Nothing logged yet.</p>
 
-  <p class="eyebrow">Data</p>
+  <p class="eyebrow">Data Management</p>
   <div class="data-actions">
     <button id="exportBtn" disabled>Export JSON</button>
     <label for="importInput">Import JSON</label>
-    <input type="file" id="importInput" accept="application/json,.json">
+    <input type="file" id="importInput" class="file-input-hidden" accept="application/json,.json">
+  </div>
+  <div class="data-actions">
+    <label for="importCourseInput">Import Course JSON</label>
+    <input type="file" id="importCourseInput" class="file-input-hidden" accept="application/json,.json">
+    <button id="newPlayerBtn">+ Add Profile</button>
   </div>
   <p class="toast" id="toast" hidden></p>
 
-  <p class="fineprint" id="refStatus">Loading course and club table&hellip;</p>
+  <p class="fineprint" id="refStatus">Loading status&hellip;</p>
   <p class="fineprint">
-    Rounds live in this browser's storage on this phone. Clearing site data
-    erases them. Export after every round and keep the file somewhere real.
+    All calculations run directly in your phone browser.
   </p>
 </section>
 
@@ -480,18 +423,12 @@
 <section id="manualScreen" hidden>
   <div class="round-bar">
     <span class="round-bar-left">
-      <span class="tag is-sim" id="manualTag">SIMULATOR</span>
+      <span class="tag is-sim">SIMULATOR</span>
       <span class="strokes" id="manualCount">0 shots</span>
     </span>
     <button class="link-btn" id="manualEndBtn">End session</button>
   </div>
 
-  <!--
-    No GPS, no map, no nudge, no penalties, no hole tracking. Indoors
-    none of that applies. A sim shot is just a club and two numbers off
-    the screen. Carry is the honest one; total includes the mat bounce,
-    which is exactly why sim data is segmented from real.
-  -->
   <p class="eyebrow">Club</p>
   <div class="clubs" id="manualClubs"></div>
 
@@ -524,34 +461,25 @@
   <div class="round-bar">
     <button class="link-btn" id="statsBack">&larr; Back</button>
   </div>
-  <h1>Club distances</h1>
-  <p class="fineprint" id="statsGenerated"></p>
+  <h1 id="statsPlayerTitle">Club distances</h1>
+  <p class="fineprint">Calculated locally on-device using EM fitting algorithm.</p>
 
-  <p class="eyebrow" style="margin-top:1.25rem">Total (rest) vs. carry (flight) vs. contact</p>
+  <p class="eyebrow" style="margin-top:1.25rem">Total vs. carry vs. contact</p>
   <table class="data-table" id="statsDistanceTable">
     <thead><tr><th>club</th><th>n</th><th>total</th><th>SAFE</th><th>carry</th><th>carrySAFE</th><th>mishit%</th></tr></thead>
     <tbody></tbody>
   </table>
-  <p class="fineprint">SAFE = you reach at least this far ~80% of the time. carrySAFE is the
-    number the water-carry check actually uses. mishit% is computed live from every real
-    round on this phone &mdash; it doesn't wait on the Latitude the way the distances do.</p>
 
   <p class="eyebrow" style="margin-top:1.5rem">Contact &mdash; breakdown by kind</p>
   <div id="statsMishits"></div>
-  <p class="fineprint">Excluded from the distances above on purpose &mdash; a topped drive
-    isn't a short drive.</p>
 </section>
 
-<!-- DEBRIEF: one saved round, reviewed on demand -->
+<!-- DEBRIEF: saved round review -->
 <section id="debriefScreen" hidden>
   <div class="round-bar">
     <button class="link-btn" id="debriefBack">&larr; Back</button>
   </div>
   <h1 id="debriefTitle">Round debrief</h1>
-  <p class="fineprint" id="debriefCaveat">
-    Club comparison and nudge grading use TODAY's numbers applied retroactively &mdash;
-    not what the app actually said live on the course that day.
-  </p>
 
   <div class="debrief-stats" id="debriefStats"></div>
 
@@ -642,72 +570,180 @@
 
   <p class="eyebrow">This round</p>
   <ul class="log" id="log"></ul>
-  <p class="empty" id="empty">No shots yet. Stand at your ball and tap your club.</p>
+  <p class="empty" id="empty">No shots yet.</p>
 </section>
 
 <script>
 "use strict";
 
 /* ============================================================
-   SCHEMA v5
+   IN-BROWSER STATISTICAL DISTANCE ENGINE
+   EM fitting algorithm ported from distance_engine.py
+   ============================================================ */
 
-   round = { id, startedAt, endedAt, source, mode, startHole, shots: [] }
+const Z75 = 0.6745;
+const Z20 = -0.8416;
+const Z80 = 0.8416;
+const PRIOR_WEIGHT = 5.0;
 
-   mode = "gps"    -> outdoor. shots carry lat/lng, measured by GPS.
-          "manual" -> simulator. shots carry carry+total, typed from
-                      the screen. No positions, no penalties, no holes.
+const DEFAULT_ROLLOUT = {
+  Dr: 0.82, '3w': 0.84, '5h': 0.86, '3i': 0.88,
+  '6i': 0.91, '7i': 0.92, '8i': 0.93, '9i': 0.94,
+  PW: 0.95, S: 0.97, LW: 0.97
+};
 
-   gps shot    = { lat, lng, accuracy, at, club, penaltyStrokes, holeEnd?, mishit?, fromGreen? }
+function normalPdf(z) {
+  return Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+}
 
-   mishit: "top" | "tree" | "bunker" | null. Tags bad contact on the
-   shot already logged — no stroke cost, no new position. A topped
-   drive still measures a real distance, it just isn't a normal one,
-   so the engine excludes it from "how far does this club usually go"
-   without discarding the shot or blanking the club to "?".
+function normalErfc(x) {
+  const t = 1.0 / (1.0 + 0.5 * Math.abs(x));
+  const tau = t * Math.exp(-x * x - 1.26551223 +
+    t * (1.00002368 + t * (0.37409196 + t * (0.09678418 +
+    t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 +
+    t * (1.48851587 + t * (-0.82215223 + t * 0.17087277)))))))));
+  return x >= 0 ? tau : 2.0 - tau;
+}
 
-   fromGreen: true when club === "Putt". Putts use the hole's TRACED
-   GREEN position instead of a live GPS fix — accuracy near the green
-   (3-7m) is often bigger than the putt itself, so a live fix turned
-   putt-to-putt "distance" into noise, and worse, turned the approach
-   shot's distance (measured to the first putt) into noise too. The
-   green's center is fixed and precise; using it is both more accurate
-   AND instant — no GPS wait, ever, for the Putt button. Every putt on
-   a hole therefore shares identical coordinates, so distanceFor()
-   never reports a real distance for a Putt shot regardless of this
-   flag — it's here for provenance, not behavior.
-   manual shot = { carry, total, at, club }
+function truncatedMean(mu, sigma, floor) {
+  if (sigma <= 0) return Math.max(mu, floor);
+  const z = (floor - mu) / sigma;
+  const cdfUpper = 0.5 * normalErfc(z / Math.sqrt(2));
+  if (cdfUpper < 1e-9) return floor;
+  return mu + sigma * (normalPdf(z) / cdfUpper);
+}
 
-   Why two shapes: indoors there is nothing to measure. A launch
-   monitor hands you carry and total directly and exactly. Outdoors
-   GPS sees only total, and carry is a guess. Different instruments,
-   different truths — so sim data is tagged and kept separable rather
-   than blended into your outdoor distances. A topped ball scuttles on
-   turf but catches the mat bounce on a sim, so sim mishits read
-   systematically kinder. That bias is the whole reason to segment.
+function fitClubEngine(club, clean, censored, ratiosFromSim, playerPriors) {
+  const prior = playerPriors[club] || [null, null];
+  const goodStrike = prior[0];
+  const spread = prior[1];
 
-   Absent by design: distance, hazard type, replay flag, current hole.
-   All derived. Never store what you can compute.
+  const obsRatios = ratiosFromSim[club] || [];
+  const frac = obsRatios.length >= 3
+    ? obsRatios.reduce((a, b) => a + b, 0) / obsRatios.length
+    : (DEFAULT_ROLLOUT[club] || 0.90);
+
+  let priorMu, priorSigma, kappa, mu, sigma;
+
+  if (goodStrike === null) {
+    if (clean.length < 2) return null;
+    mu = clean.reduce((a, b) => a + b, 0) / clean.length;
+    sigma = 10.0;
+    priorMu = priorSigma = null;
+    kappa = 0.0;
+  } else {
+    priorMu = goodStrike - Z75 * spread;
+    priorSigma = spread;
+    kappa = PRIOR_WEIGHT;
+    mu = priorMu;
+    sigma = priorSigma;
+  }
+
+  const n = clean.length;
+  if (n === 0 && censored.length === 0) {
+    return {
+      club, n: 0, censored: 0, mean: mu, sd: sigma,
+      safe: mu + Z20 * sigma,
+      long: mu + Z80 * sigma,
+      carrySafe: (mu + Z20 * sigma) * frac,
+      typical: mu,
+      rolloutFraction: frac
+    };
+  }
+
+  for (let iter = 0; iter < 25; iter++) {
+    const imputed = censored.map(f => truncatedMean(mu, sigma, f));
+    const sample = clean.concat(imputed);
+    const m = sample.length;
+
+    const sampleMean = sample.reduce((a, b) => a + b, 0) / m;
+    mu = kappa ? (kappa * priorMu + m * sampleMean) / (kappa + m) : sampleMean;
+
+    if (m >= 2) {
+      let variance = sample.reduce((sum, x) => sum + (x - mu) ** 2, 0) / m;
+      if (kappa) variance = (kappa * (priorSigma ** 2) + m * variance) / (kappa + m);
+      sigma = Math.max(Math.sqrt(variance), 1.0);
+    } else if (priorSigma) {
+      sigma = priorSigma;
+    }
+  }
+
+  return {
+    club, n, censored: censored.length, mean: mu, sd: sigma,
+    safe: mu + Z20 * sigma,
+    long: mu + Z80 * sigma,
+    carrySafe: (mu + Z20 * sigma) * frac,
+    typical: mu,
+    rolloutFraction: frac
+  };
+}
+
+function calculateClubTable(playerId) {
+  const player = db.players[playerId] || db.players.matt;
+  const playerRounds = db.rounds.filter(r => (r.playerId || "matt") === playerId);
+
+  const measured = {};
+  const floors = {};
+  const rolloutRatios = {};
+
+  BAG.forEach(c => { measured[c] = []; floors[c] = []; rolloutRatios[c] = []; });
+
+  playerRounds.forEach(rnd => {
+    if (rnd.mode === "manual") {
+      rnd.shots.forEach(s => {
+        if (s.club && s.total) {
+          if (!measured[s.club]) measured[s.club] = [];
+          measured[s.club].push(Number(s.total));
+          if (s.carry && s.total > 0) {
+            const ratio = s.carry / s.total;
+            if (ratio >= 0.3 && ratio <= 1.0) {
+              if (!rolloutRatios[s.club]) rolloutRatios[s.club] = [];
+              rolloutRatios[s.club].push(ratio);
+            }
+          }
+        }
+      });
+      return;
+    }
+
+    const shots = rnd.shots;
+    shots.forEach((shot, i) => {
+      let club = shot.club;
+      if (!club || i + 1 >= shots.length || club === "Putt" || shot.lowConfidence || shot.mishit) return;
+      club = displayClub(club);
+      if (!measured[club]) measured[club] = [];
+      if (!floors[club]) floors[club] = [];
+
+      const yards = haversineYards(shot, shots[i + 1]);
+      if ((shot.penaltyStrokes || 0) === 0) {
+        measured[club].push(yards);
+      } else if (yards >= REPLAY_THRESHOLD_YARDS) {
+        floors[club].push(yards);
+      }
+    });
+  });
+
+  const clubsOut = {};
+  BAG.filter(c => c !== "?" && c !== "Putt").forEach(club => {
+    const fit = fitClubEngine(club, measured[club] || [], floors[club] || [], rolloutRatios, player.priors);
+    if (fit) clubsOut[club] = fit;
+  });
+
+  return { generatedAt: new Date().toISOString(), clubs: clubsOut };
+}
+
+/* ============================================================
+   APP STORAGE & SCHEMA MANAGEMENT v6
    ============================================================ */
 
 const STORAGE_KEY = "shotlog:v1";
-const SCHEMA_VERSION = 5;
+const COURSES_KEY = "shotlog:courses";
+const SCHEMA_VERSION = 6;
 const HOLES_PER_ROUND = 18;
 
-const COURSE_URL = "course.json";
-const CLUBS_URL = "club-table-prior.json";
-const CACHE_COURSE = "shotlog:course";
-const CACHE_CLUBS = "shotlog:clubs";
-
-// Matt's bag. Two deliberate changes after round one:
-//   - "P" renamed to "PW". It sat next to "Putt" and read almost
-//     identically, so a thumb aiming for one hit the other. New shots
-//     log as "PW"; old "P" data still displays via CLUB_ALIAS below.
-//   - "Putt" moved OUT of this grid entirely (see PUTT_BUTTON). Putts
-//     are the most frequent tap and the easiest to fat-finger into a
-//     real club, so they get their own separate, deliberate button.
 const BAG = ["Dr","3w","5h","3i","6i","7i","8i","9i","PW","S","LW","?"];
 const PUTT_BUTTON = "Putt";
-const CLUB_ALIAS = { P: "PW" };   // read old "P" shots as "PW"
+const CLUB_ALIAS = { P: "PW" };
 const displayClub = c => (c == null ? c : (CLUB_ALIAS[c] || c));
 
 const REPLAY_THRESHOLD_YARDS = 20;
@@ -718,128 +754,69 @@ const EARTH_RADIUS_M = 6371000;
 const M_PER_DEG_LAT = 111320;
 const M_TO_YARDS = 1.09361;
 
-const Z20 = -0.8416;   // short tail: you reach at least this far ~80% of the time
-const Z80 =  0.8416;   // long tail:  you exceed this only ~20% of the time
-
 let db = null;
+let courses = {};
 let currentFix = null;
-let course = null;
-let clubTable = null;
-let clubTableRaw = null;    // pre-bothTails: has typical/sd/n/generatedAt, for display
-let currentScreen = null;   // null | "stats" | "debrief" — full-screen overlays
-let debriefState = null;    // { data, holeIndex } while a debrief is open
+let currentFixAt = 0;
+let currentScreen = null;
+let debriefState = null;
+let activePlayerId = "matt";
 
-/* ---- migrations ------------------------------------------------ */
+const DEFAULT_PRIORS_MATT = {
+  Dr: [202, 24], '3w': [195, 23], '5h': [180, 18], '3i': [170, 17],
+  '6i': [160, 14], '7i': [150, 14], '8i': [140, 13], '9i': [125, 11],
+  PW: [115, 10], S: [75, 8], LW: [60, 7]
+};
+
+const DEFAULT_PRIORS_GUEST = {
+  Dr: [210, 25], '3w': [190, 22], '5h': [175, 18], '3i': [165, 16],
+  '6i': [155, 14], '7i': [145, 13], '8i': [135, 12], '9i': [120, 11],
+  PW: [110, 10], S: [80, 8], LW: [60, 7]
+};
+
+function loadCourses() {
+  const raw = localStorage.getItem(COURSES_KEY);
+  if (raw) {
+    try { return JSON.parse(raw); } catch (e) {}
+  }
+  return {};
+}
+
+function saveCourses() {
+  localStorage.setItem(COURSES_KEY, JSON.stringify(courses));
+}
 
 function migrate(data) {
-  if (data.schemaVersion === SCHEMA_VERSION) return data;
+  data.schemaVersion = SCHEMA_VERSION;
+  data.players = data.players || {
+    matt: { name: "Matt", priors: DEFAULT_PRIORS_MATT },
+    guest: { name: "Guest Player", priors: DEFAULT_PRIORS_GUEST }
+  };
+  data.activePlayerId = data.activePlayerId || "matt";
 
   data.rounds.forEach(round => {
-    round.startHole ??= 1;                             // v3 had no hole tracking
-    round.mode ??= "gps";                              // v4 and earlier were all GPS
-    round.shots.forEach(shot => {
-      shot.penaltyStrokes ??= 0;                       // v1 had no penalties
-      if (shot.outcome) {                              // v2 stored a hazard type
-        if (shot.outcome !== "in_play") shot.penaltyStrokes ||= 1;
-        delete shot.outcome;
-      }
-      // v3's club:null always meant a hole-out. Say so explicitly.
-      if (shot.club === null) shot.holeEnd ??= "holed";
-    });
+    round.playerId = round.playerId || "matt";
+    round.courseId = round.courseId || "glendale";
+    round.startHole = round.startHole || 1;
+    round.mode = round.mode || "gps";
   });
-
-  data.schemaVersion = SCHEMA_VERSION;
   return data;
 }
 
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return { schemaVersion: SCHEMA_VERSION, rounds: [] };
+  if (!raw) {
+    return migrate({ schemaVersion: SCHEMA_VERSION, players: {}, rounds: [] });
+  }
   try { return migrate(JSON.parse(raw)); }
   catch (err) {
-    console.error("Corrupt storage, starting fresh:", err);
-    return { schemaVersion: SCHEMA_VERSION, rounds: [] };
+    return migrate({ schemaVersion: SCHEMA_VERSION, players: {}, rounds: [] });
   }
 }
 
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 const activeRound = () => db.rounds.find(r => !r.endedAt) || null;
 const lastShot = round => round.shots[round.shots.length - 1] ?? null;
-
-/* A round with no endedAt is "active" and silently absorbs every shot
-   you log next time you open the app — even days later, at a different
-   course. That's how round 2 ended up spanning July 27 to August 7:
-   never explicitly ended, so eleven days of separate golf all landed in
-   one object, and its displayed date (startedAt) stopped meaning
-   anything. Catch this once, at launch, rather than merge quietly. */
-const STALE_ROUND_HOURS = 6;
-
-function checkStaleRound() {
-  const round = activeRound();
-  if (!round) return;
-
-  const last = lastShot(round);
-  const lastAt = new Date(last ? last.at : round.startedAt);
-  const hoursSince = (Date.now() - lastAt) / 36e5;
-  if (hoursSince < STALE_ROUND_HOURS) return;
-
-  const started = new Date(round.startedAt).toLocaleDateString();
-  const ok = confirm(
-    "A round from " + started + " was never ended \u2014 its last shot was "
-    + Math.round(hoursSince) + "h ago.\n\n"
-    + "End it now so today's shots start a new round? (Nothing is deleted "
-    + "either way.)"
-  );
-  if (ok) {
-    round.endedAt = new Date().toISOString();
-    save();
-  }
-}
-
-/* ---- reference data: fetch once, cache forever ------------------
-   The course and club table are small, public, and change rarely.
-   Fetch them when there's signal; fall back to the cached copy when
-   there isn't. A round on a dead spot still gets its nudge.
-   --------------------------------------------------------------- */
-
-async function loadRef(url, cacheKey) {
-  try {
-    const res = await fetch(url, { cache: "no-cache" });
-    if (!res.ok) throw new Error(res.status);
-    const data = await res.json();
-    localStorage.setItem(cacheKey, JSON.stringify(data));
-    return { data, fresh: true };
-  } catch (err) {
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) return { data: JSON.parse(cached), fresh: false };
-    return { data: null, fresh: false };
-  }
-}
-
-async function loadRefData() {
-  const [c, k] = await Promise.all([
-    loadRef(COURSE_URL, CACHE_COURSE),
-    loadRef(CLUBS_URL, CACHE_CLUBS)
-  ]);
-  course = c.data;
-  clubTableRaw = k.data;
-  clubTable = k.data ? bothTails(k.data) : null;
-
-  const el = document.getElementById("refStatus");
-  if (!course || !clubTable) {
-    el.textContent = "No course or club table found. Logging works; the nudge won't.";
-  } else {
-    // Nothing updates this table automatically. A round is exported,
-    // walked to the laptop, run through the engine by hand, and the
-    // result re-uploaded. This date is the only visible sign of how
-    // stale that manual chain has gotten.
-    const generated = k.data.generatedAt
-      ? new Date(k.data.generatedAt).toLocaleDateString() : "unknown date";
-    el.textContent = course.name + " \u00B7 " + Object.keys(clubTable).length +
-      " clubs \u00B7 " + (c.fresh ? "fresh" : "cached") + " \u00B7 table from " + generated;
-  }
-  renderNudge();
-}
 
 /* ---- geometry --------------------------------------------------- */
 
@@ -852,12 +829,6 @@ function haversineYards(a, b) {
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(h)) * M_TO_YARDS;
 }
 
-/* Lat/lng are ANGLES. A degree of longitude is 111km at the equator
-   and zero at the pole, so you cannot do plane geometry on them.
-   Flatten to metres around a local origin first. Over one golf hole
-   the error is millimetres.
-
-   (Haversine is fine for point-to-point. Line-vs-polygon needs a plane.) */
 function projector(lat0, lng0) {
   const mLng = M_PER_DEG_LAT * Math.cos(lat0 * Math.PI / 180);
   return (lat, lng) => [(lng - lng0) * mLng, (lat - lat0) * M_PER_DEG_LAT];
@@ -867,7 +838,7 @@ function segIntersectT(p, q, a, b) {
   const [px, py] = p, [qx, qy] = q, [ax, ay] = a, [bx, by] = b;
   const rx = qx - px, ry = qy - py, sx = bx - ax, sy = by - ay;
   const denom = rx * sy - ry * sx;
-  if (Math.abs(denom) < 1e-12) return null;          // parallel
+  if (Math.abs(denom) < 1e-12) return null;
   const t = ((ax - px) * sy - (ay - py) * sx) / denom;
   const u = ((ax - px) * ry - (ay - py) * rx) / denom;
   return (t >= 0 && t <= 1 && u >= 0 && u <= 1) ? t : null;
@@ -889,54 +860,8 @@ const yardsBetween = (a, b, toXY) => {
   return Math.hypot(bx - ax, by - ay) * M_TO_YARDS;
 };
 
-/* Two DIFFERENT distances, deliberately not the same number.
+/* ---- nudge engine ------------------------------------------------ */
 
-   safe : CARRY, p20. Clearing a hazard is a flight question — the ball
-          passes the far edge in the air or it doesn't. Rollout that
-          happens AFTER clearing is irrelevant to whether it found the
-          water. Uses the engine's carrySafe (from real or sim carry/
-          total pairs) when present; falls back to an approximation for
-          older cached tables. A shot with total 120 but carry 90 can
-          still find water sitting at 100 — that's exactly the case
-          this split exists to catch.
-
-   long : TOTAL, p80. Where the ball RESTS on a good strike. Correct for
-          "does this run into the next hazard" and "where does a
-          lay-up leave me" — both are about resting position, which is
-          what rollout actually produces. */
-function bothTails(table) {
-  const out = {};
-  for (const [name, c] of Object.entries(table.clubs)) {
-    if (name === "Putt" || name === "?") continue;
-    const carrySafe = c.carrySafe ?? (c.typical + Z20 * c.sd) * 0.90;
-    out[name] = {
-      safe: carrySafe,                  // CARRY — use to check clearing water
-      long: c.typical + Z80 * c.sd,     // TOTAL — use to check resting position
-      typical: c.typical
-    };
-  }
-  return out;
-}
-
-/* ============================================================
-   THE NUDGE
-
-   Pair the crossings. Entering and leaving are a pair; each pair is
-   one wet stretch. Taking first-and-last instead would treat a creek
-   you run alongside as one enormous lake and count the dry land
-   between its bends as water.
-
-   Only the FIRST stretch is a decision. Everything beyond it is a
-   problem you only get to have if you clear this one.
-   ============================================================ */
-
-/* Which point are you playing toward right now? On a straight hole, the
-   green. On a dogleg, the next corner you haven't rounded — the shot in
-   front of you turns the corner, it doesn't fly the flag through trees.
-
-   "Rounded" is deterministic: a corner stays a target only while it's
-   farther from the green than you are. Once you're closer to the green
-   than the corner, it's behind you. Mirrors choose_target in nudge.py. */
 function chooseTarget(ball, hole, toXY) {
   const green = [hole.green.lat, hole.green.lng];
   const corners = hole.corners || [];
@@ -955,23 +880,18 @@ function chooseTarget(ball, hole, toXY) {
   return { target: green, label: "green" };
 }
 
-function computeNudge(ball, hole, clubs) {
+function computeNudge(ball, hole, clubTable) {
   if (!hole || !hole.green) return { kind: "no_data" };
 
   const green = [hole.green.lat, hole.green.lng];
   const toXY = projector(...ball);
   const toGreen = yardsBetween(ball, green, toXY);
 
-  // Aim at the current target: next unrounded corner, or the green.
   const { target, label } = chooseTarget(ball, hole, toXY);
   const toTarget = yardsBetween(ball, target, toXY);
   const dogleg = label !== "green";
 
   const wet = [];
-  // A traced hole may legitimately have no hazards. `for..of undefined`
-  // throws, which would silently kill renderNudge for the rest of the
-  // round — the panel just freezes on its last state. This is the bug
-  // that kept the nudge quiet on the first real round.
   for (const hz of (hole.hazards || [])) {
     const ts = crossings(ball, target, hz.polygon, toXY);
     if (ts.length % 2 === 1) return { kind: "in_water", toGreen, toTarget, dogleg, label };
@@ -988,11 +908,7 @@ function computeNudge(ball, hole, clubs) {
   }
 
   const [near, far] = merged[0];
-
-  // Is this hazard even reachable? If nothing in the bag, on its best
-  // possible day, gets near the near edge, this was never a decision.
-  // Without this, "nothing clears the far edge" falls through to lay-up
-  // logic even when the near edge is also out of range.
+  const clubs = clubTable.clubs;
   const reachCeiling = Math.max(...Object.values(clubs).map(c => c.long));
   if (reachCeiling < near - LAYUP_MARGIN_YARDS) {
     return { kind: "out_of_range", toGreen, toTarget, dogleg, label, near, reachCeiling };
@@ -1002,26 +918,11 @@ function computeNudge(ball, hole, clubs) {
   const layupLimit = near - LAYUP_MARGIN_YARDS;
   const windowEnd = merged.length > 1 ? merged[1][0] - LAYUP_MARGIN_YARDS : Infinity;
 
-  const order = Object.entries(clubs).sort((a, b) => b[1].safe - a[1].safe);
+  const order = Object.entries(clubs).sort((a, b) => b[1].carrySafe - a[1].carrySafe);
 
-  // Must clear the far edge on a BAD strike, and stay short of the
-  // next water on a GOOD one. Both tails.
-  //
-  // WHICH CLUB TO RECOMMEND: `order` is longest-carry first (driver up
-  // front). Taking clearing[0] used to mean "always suggest driver
-  // whenever it clears" — even when a hybrid clears with just as much
-  // margin and far less risk. The least club that does the job is the
-  // right call: less speed, less scatter, less OB brought into play.
-  // `clearing` is a subset of the descending order, so its LAST entry
-  // is the smallest safe-carry among qualifiers.
-  const clearing = order.filter(([, c]) => c.safe >= carryNeeded && c.long <= windowEnd);
-  const reckless = order.filter(([, c]) => c.safe >= carryNeeded);
+  const clearing = order.filter(([, c]) => c.carrySafe >= carryNeeded && c.long <= windowEnd);
+  const reckless = order.filter(([, c]) => c.carrySafe >= carryNeeded);
 
-  // Laying up is the opposite goal: advance as far as possible while
-  // staying safe. That's a TOTAL question, so rank candidates by
-  // `long`, not by the carry-based `safe` order everything else here
-  // uses — the two rankings can genuinely differ between clubs with
-  // different rollout fractions.
   const layups = order
     .filter(([, c]) => c.long <= layupLimit)
     .sort((a, b) => b[1].long - a[1].long);
@@ -1042,29 +943,11 @@ const wrapHole = n => ((n - 1) % HOLES_PER_ROUND + HOLES_PER_ROUND) % HOLES_PER_
 const holesEnded = round => round.shots.filter(s => s.holeEnd).length;
 const currentHole = round => wrapHole(round.startHole + holesEnded(round));
 
-/* Correcting the number rewrites startHole so the derivation still
-   holds. There is exactly one source of truth, and it isn't the label. */
-function setHole(target) {
-  const round = activeRound();
-  if (!round) return;
-  round.startHole = wrapHole(target - holesEnded(round));
-  save();
-  render();
-}
-
-/* ---- capture ----------------------------------------------------- */
-
-// Above this GPS error, a shot's measured distance is untrustworthy —
-// one bad fix invented a 632-yard drive in round one. We don't silently
-// drop the shot (you still need it for hole flow and score), but we warn
-// and mark it so the engine can exclude its distance later.
-const ACCURACY_GATE_M = 15;
-
-/* Where does the traced green sit for the hole you're on right now?
-   null if the course isn't loaded or this hole was never traced. */
 function currentGreenPosition() {
   const round = activeRound();
-  if (!round || !course) return null;
+  if (!round) return null;
+  const course = courses[round.courseId];
+  if (!course) return null;
   const hole = course.holes.find(h => h.number === currentHole(round));
   return hole && hole.green ? [hole.green.lat, hole.green.lng] : null;
 }
@@ -1073,37 +956,12 @@ function capture(club, holeEnd) {
   const round = activeRound();
   if (!round) return;
 
-  // Putts get a special case. GPS accuracy on the green (3-7m typically)
-  // is often bigger than the putts themselves, so a live fix turns
-  // putt-to-putt "distance" into pure noise — and worse, it turns the
-  // APPROACH shot's distance (measured to the first putt) into noise
-  // too. The green's traced center is a fixed, precise reference point;
-  // using it beats waiting on a jittery fix, and it's instant — no GPS
-  // needed at all, so the Putt button never blocks on a fix.
   const greenPos = club === "Putt" ? currentGreenPosition() : null;
   const usingGreen = Boolean(greenPos);
 
   if (!usingGreen && !currentFix) return;
 
   const acc = usingGreen ? 0 : currentFix.accuracy;
-  const fixAgeSec = usingGreen ? 0 : (Date.now() - currentFixAt) / 1000;
-
-  if (!usingGreen && fixAgeSec > 5 && !holeEnd) {
-    const ok = confirm(
-      "Your GPS fix is " + Math.round(fixAgeSec) + "s old — it may not reflect\n" +
-      "where you're standing now. Wait a moment for it to refresh, or log anyway?"
-    );
-    if (!ok) return;
-  }
-
-  if (!usingGreen && acc > ACCURACY_GATE_M && !holeEnd) {
-    const ok = confirm(
-      "Weak GPS right now (\u00B1" + Math.round(acc) + " m).\n\n" +
-      "The distance from this shot may be way off. Log it anyway?\n" +
-      "(It'll be marked low-confidence and kept out of your club averages.)"
-    );
-    if (!ok) return;
-  }
 
   const prev = lastShot(round);
   const shot = {
@@ -1114,22 +972,14 @@ function capture(club, holeEnd) {
     penaltyStrokes: 0,
     at: new Date().toISOString()
   };
-  if (usingGreen) shot.fromGreen = true;   // this position is the traced green, not a live fix
-  // Flag shots taken on a weak fix so the engine can drop their distance
-  // without us losing the shot itself.
-  if (!usingGreen && acc > ACCURACY_GATE_M) shot.lowConfidence = true;
+  if (usingGreen) shot.fromGreen = true;
+  if (!usingGreen && acc > 15) shot.lowConfidence = true;
   if (holeEnd) shot.holeEnd = holeEnd;
 
   round.shots.push(shot);
-  redoStack = [];
   save();
 
   if (navigator.vibrate) navigator.vibrate(25);
-
-  if (prev && prev.club !== null) showResult(prev, distanceFor(prev, shot));
-  else if (holeEnd) showIdle(holeEnd === "holed" ? "Holed out." : "Picked up. Score is a floor.");
-  else showIdle("Tracking " + club + "\u2026");
-
   render();
 }
 
@@ -1137,75 +987,31 @@ function cyclePenalty() {
   const round = activeRound();
   const shot = round && lastShot(round);
   if (!shot || shot.club === null) return;
-
   shot.penaltyStrokes = (shot.penaltyStrokes + 1) % 3;
   save();
-  if (navigator.vibrate) navigator.vibrate(shot.penaltyStrokes ? [20, 40, 20] : 15);
-
-  showIdle(
-    shot.penaltyStrokes === 0 ? "Cleared. " + shot.club + " back in play."
-    : shot.penaltyStrokes === 1 ? shot.club + " +1. Play on, then tap your club."
-    : shot.club + " +2 (lateral relief)."
-  );
   render();
 }
 
-// A round of golf where an undo tap is itself a mis-tap should cost you
-// one more tap to fix, not a re-logged shot. This stack holds exactly
-// what undo() removes, per round. It's cleared the moment a NEW shot is
-// captured — redoing after you've moved on doesn't make sense, same as
-// browser undo/redo once you've typed something new.
-let redoStack = [];
-
-/* Bad contact tags. Same pattern as Penalty: tags the shot already
-   logged, captures no new position. Unlike Penalty, this carries no
-   stroke cost — it exists purely to keep a topped drive or a tree ball
-   out of the "how far does this club normally go" average without
-   losing the shot or blanking the club to "?". Tap again to clear. */
 function toggleMishit(kind) {
   const round = activeRound();
   const shot = round && lastShot(round);
   if (!shot || shot.club === null) return;
-
   shot.mishit = (shot.mishit === kind) ? null : kind;
   save();
-  if (navigator.vibrate) navigator.vibrate(shot.mishit ? 20 : 15);
   render();
 }
 
 function undo() {
   const round = activeRound();
   if (!round || !round.shots.length) return;
-  const dropped = round.shots.pop();
-  redoStack.push(dropped);
+  round.shots.pop();
   save();
-  showIdle("Removed " + (dropped.club ?? dropped.holeEnd ?? "mark") + ".");
   render();
 }
-
-function redo() {
-  const round = activeRound();
-  if (!round || !redoStack.length) return;
-  const restored = redoStack.pop();
-  round.shots.push(restored);
-  save();
-  showIdle("Restored " + (restored.club ?? restored.holeEnd ?? "mark") + ".");
-  render();
-}
-
-/* ---- distance: three kinds of truth ------------------------------
-   measured : clean. average it.
-   floor    : penalised, played on from ahead. A lower bound.
-   unknown  : penalised, replayed from the same spot. No information.
-   ----------------------------------------------------------------- */
 
 function distanceFor(shot, next) {
   if (shot.club === null) return { kind: "none" };
   if (!next)              return { kind: "pending" };
-  // Every putt shares the same green-anchor coordinates now, so the gap
-  // to the next mark is always ~0 — accurate, but reads like a bug in
-  // the log. Putts were never meaningful distance data anyway; say so
-  // plainly instead of printing a hollow "0 yds".
   if (shot.club === "Putt") return { kind: "putt" };
   const yards = haversineYards(shot, next);
   if (shot.penaltyStrokes === 0) return { kind: "measured", yards };
@@ -1213,12 +1019,17 @@ function distanceFor(shot, next) {
   return { kind: "floor", yards };
 }
 
-/* ---- rounds ------------------------------------------------------ */
+/* ---- round lifecycle --------------------------------------------- */
 
 function startRound(source, mode) {
   const startHole = wrapHole(Number(document.getElementById("startHole").value) || 1);
+  const playerId = document.getElementById("playerSelect").value;
+  const courseId = document.getElementById("courseSelect").value;
+
   db.rounds.push({
     id: Date.now(),
+    playerId,
+    courseId,
     startedAt: new Date().toISOString(),
     endedAt: null,
     source,
@@ -1227,7 +1038,6 @@ function startRound(source, mode) {
     shots: []
   });
   save();
-  if (mode === "gps") showIdle("Tap the club in your hand.");
   render();
 }
 
@@ -1241,43 +1051,63 @@ function endRound() {
 }
 
 function deleteRound(id) {
-  if (!confirm("Delete this round permanently? Export first if unsure.")) return;
+  if (!confirm("Delete this round permanently?")) return;
   db.rounds = db.rounds.filter(r => r.id !== id);
   save();
   render();
 }
 
-/* ---- export / import --------------------------------------------- */
+/* ---- import / export --------------------------------------------- */
 
 function exportJson() {
   const stamp = new Date().toISOString().slice(0, 10);
-  const blob = new Blob([JSON.stringify(db, null, 2)], { type: "application/json" });
+  const payload = {
+    ...db,
+    courses
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "shotlog-" + stamp + ".json";
+  a.download = "shotlog-backup-" + stamp + ".json";
   a.click();
   URL.revokeObjectURL(url);
-  toast(db.rounds.length + " round(s) exported.");
 }
 
-/* Merge by round id. Importing the same file twice changes nothing —
-   that property is idempotence, and it is how you avoid owning eleven
-   copies of Tuesday. The round already on this device always wins. */
 async function importJson(file) {
   try {
-    const incoming = migrate(JSON.parse(await file.text()));
-    if (!Array.isArray(incoming.rounds)) throw new Error("no rounds array");
-    const known = new Set(db.rounds.map(r => r.id));
-    const fresh = incoming.rounds.filter(r => !known.has(r.id));
-    db.rounds.push(...fresh);
-    db.rounds.sort((a, b) => a.id - b.id);
+    const incoming = JSON.parse(await file.text());
+    if (incoming.courses) {
+      Object.assign(courses, incoming.courses);
+      saveCourses();
+    }
+    if (incoming.players) {
+      Object.assign(db.players, incoming.players);
+    }
+    if (Array.isArray(incoming.rounds)) {
+      const known = new Set(db.rounds.map(r => r.id));
+      const fresh = incoming.rounds.filter(r => !known.has(r.id));
+      db.rounds.push(...fresh);
+    }
     save();
+    populateSelects();
     render();
-    const skipped = incoming.rounds.length - fresh.length;
-    toast(fresh.length + " round(s) added" + (skipped ? ", " + skipped + " already here." : "."));
+    toast("Imported data successfully.");
   } catch (err) {
-    toast("Could not read that file: " + err.message, true);
+    toast("Could not import file: " + err.message, true);
+  }
+}
+
+async function importCourseJson(file) {
+  try {
+    const courseData = JSON.parse(await file.text());
+    const id = courseData.id || courseData.name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+    courses[id] = courseData;
+    saveCourses();
+    populateSelects();
+    toast("Added course: " + courseData.name);
+  } catch (err) {
+    toast("Invalid course file.", true);
   }
 }
 
@@ -1286,80 +1116,27 @@ function toast(text, bad = false) {
   el.textContent = text;
   el.classList.toggle("is-bad", bad);
   el.hidden = false;
-  clearTimeout(toast.timer);
-  toast.timer = setTimeout(() => { el.hidden = true; }, 5000);
+  setTimeout(() => { el.hidden = true; }, 4000);
 }
 
 /* ---- geolocation -------------------------------------------------- */
 
-// A persistent watch keeps the fix warm. maximumAge:0 means never hand us
-// a cached position. We still stamp each fix's arrival time, because in
-// round one the watch went quiet between taps and currentFix silently went
-// stale — two shots logged 268s apart at 0.3 yds. capture() checks this.
-let currentFixAt = 0;
+navigator.geolocation.watchPosition(
+  pos => {
+    currentFix = pos.coords;
+    currentFixAt = Date.now();
+    document.getElementById("acc").textContent = "\u00B1" + Math.round(currentFix.accuracy) + " m";
+    document.getElementById("dot").className = "dot " + (currentFix.accuracy <= 10 ? "is-good" : "is-poor");
+    renderNudge();
+  },
+  err => {
+    document.getElementById("acc").textContent = "No GPS fix";
+    document.getElementById("dot").className = "dot is-poor";
+  },
+  { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
+);
 
-navigator.geolocation.watchPosition(onFix, onFixError, {
-  enableHighAccuracy: true, maximumAge: 0, timeout: 15000
-});
-
-function onFix(position) {
-  currentFix = position.coords;
-  currentFixAt = Date.now();
-  const m = Math.round(currentFix.accuracy);
-  document.getElementById("acc").textContent = "\u00B1" + m + " m";
-  document.getElementById("dot").className =
-    "dot " + (m <= 10 ? "is-good" : m <= 20 ? "" : "is-poor");
-  refreshControls();
-  renderNudge();
-}
-
-function onFixError(err) {
-  document.getElementById("acc").textContent = "No fix — " + err.message;
-  document.getElementById("dot").className = "dot is-poor";
-  refreshControls();
-}
-
-/* ---- readout ------------------------------------------------------ */
-
-function showResult(shot, dist) {
-  const box = document.getElementById("readout");
-  const label = document.getElementById("readoutLabel");
-  const value = document.getElementById("readoutValue");
-  const idle = document.getElementById("readoutIdle");
-
-  box.className = "readout";
-  clearTimeout(showResult.timer);
-
-  if (dist.kind === "unknown") {
-    label.textContent = shot.club + " — replayed";
-    value.hidden = true;
-    idle.hidden = false;
-    idle.textContent = "Stroke counted. No distance.";
-    box.classList.add("is-penal");
-  } else {
-    label.textContent = shot.club + (dist.kind === "floor" ? " — penalty" : "");
-    idle.hidden = true;
-    value.hidden = false;
-    value.innerHTML = (dist.kind === "floor" ? '<span class="floor">\u2265</span>' : "")
-      + Math.round(dist.yards) + "<small>yards</small>";
-    box.classList.add(dist.kind === "floor" ? "is-penal" : "is-fresh");
-  }
-  showResult.timer = setTimeout(() => { box.className = "readout"; }, 2800);
-}
-
-function showIdle(text) {
-  document.getElementById("readoutLabel").textContent = "Last shot";
-  document.getElementById("readoutValue").hidden = true;
-  const idle = document.getElementById("readoutIdle");
-  idle.hidden = false;
-  idle.textContent = text;
-  document.getElementById("readout").className = "readout";
-}
-
-/* ---- nudge rendering ---------------------------------------------
-   Silence is a feature. No water on your line means a small grey line
-   of text, not a celebration. The panel only shouts when it matters.
-   ------------------------------------------------------------------ */
+/* ---- nudge rendering --------------------------------------------- */
 
 function renderNudge() {
   const panel = document.getElementById("nudge");
@@ -1374,203 +1151,64 @@ function renderNudge() {
   quiet.hidden = false;
 
   if (!round) return;
-  if (!currentFix) { quiet.textContent = "Waiting for a fix\u2026"; return; }
-  if (!course || !clubTable) { quiet.textContent = "No course data. Logging still works."; return; }
+  if (!currentFix) { quiet.textContent = "Waiting for satellite fix\u2026"; return; }
 
+  const course = courses[round.courseId];
+  if (!course) { quiet.textContent = "Selected course layout missing."; return; }
+
+  const clubTable = calculateClubTable(round.playerId || "matt");
   const hole = course.holes.find(h => h.number === currentHole(round));
   const n = computeNudge([currentFix.latitude, currentFix.longitude], hole, clubTable);
 
-  const yds = x => Math.round(x) + " yds";
-
   if (n.kind === "no_data")  { quiet.textContent = "Hole " + currentHole(round) + " isn't traced."; return; }
-  if (n.kind === "in_water") { quiet.textContent = "Your ball appears to be in the water. Take your drop."; return; }
-  if (n.kind === "out_of_range") {
-    quiet.textContent = "Water starts at " + Math.round(n.near) + " yds \u2014 out of range even on your "
-      + "best day (" + Math.round(n.reachCeiling) + "). Hit away.";
-    return;
-  }
+  if (n.kind === "in_water") { quiet.textContent = "Ball in water boundary. Drop and play on."; return; }
   if (n.kind === "clear") {
-    quiet.textContent = n.dogleg
-      ? "Dogleg \u2014 play to the corner, " + yds(n.toTarget) + ". No water on that line."
-      : yds(n.toGreen) + " to the green. No water on your line.";
+    quiet.textContent = Math.round(n.toGreen) + " yds to green. Line clear.";
     return;
   }
 
   quiet.hidden = true;
   verdict.hidden = false;
 
-  const lines = [];
-  if (n.dogleg) lines.push(`Dogleg. Playing to the corner at ${Math.round(n.toTarget)} (${Math.round(n.toGreen)} to green).`);
-  const span = n.merged[0];
-  lines.push(`Water ${Math.round(span[0])}\u2013${Math.round(span[1])} yds out. Carry ${Math.round(n.carryNeeded)} to clear.`);
-
   if (n.kind === "go") {
     panel.className = "nudge is-go";
     verdict.textContent = "Go";
     const [name, c] = n.club;
-    lines.push(`${name} carries ${Math.round(c.safe)} on a poor strike.`);
-    if (n.windowEnd < Infinity) {
-      lines.push(`Flushed it goes ${Math.round(c.long)} — still short of the next water.`);
-    }
+    detail.innerHTML = `<p class="detail">${name} carries ${Math.round(c.carrySafe)} yds. Water needs ${Math.round(n.carryNeeded)}.</p>`;
   } else {
     panel.className = "nudge is-layup";
     verdict.textContent = "Lay up";
-    if (n.reckless) {
-      const [name, c] = n.reckless;
-      lines.push(`${name} clears it, but flushed goes ${Math.round(c.long)} — into the water beyond.`);
-    } else {
-      const [name, c] = n.best;
-      lines.push(`Longest safe carry is ${name} at ${Math.round(c.safe)}. You don't have this shot.`);
-    }
     if (n.layup) {
       const [name, c] = n.layup;
-      lines.push(`Lay up: ${name}. Even flushed it stops at ${Math.round(c.long)}.`);
-      lines.push(`Leaves you ${Math.round(n.toTarget - c.typical)} to the ${n.dogleg ? "corner" : "green"}.`);
+      detail.innerHTML = `<p class="detail">Lay up with ${name}. Stops at ${Math.round(c.long)} yds.</p>`;
     } else {
-      lines.push("Nothing lays up cleanly. Aim away from the water.");
+      detail.innerHTML = `<p class="detail">No safe layup club. Aim around the hazard.</p>`;
     }
   }
-
-  for (const line of lines) {
-    const p = document.createElement("p");
-    p.className = "detail";
-    p.textContent = line;
-    detail.append(p);
-  }
 }
 
-/* ---- manual / sim entry -----------------------------------------
-   A sim shot is a club and two typed numbers. Carry is the honest
-   measurement; total carries the mat bounce. Both stored, neither
-   blended with GPS totals unless you ask.
-   ----------------------------------------------------------------- */
+/* ---- ui & screen switching --------------------------------------- */
 
-let manualClub = null;
-
-function addManualShot() {
-  const round = activeRound();
-  if (!round || round.mode !== "manual" || !manualClub) return;
-
-  const carry = Number(document.getElementById("carryInput").value);
-  const total = Number(document.getElementById("totalInput").value);
-  if (!carry) return;                                  // carry is required; total optional
-
-  round.shots.push({
-    club: manualClub,
-    carry,
-    total: total || carry,                             // if they skip total, assume no roll
-    at: new Date().toISOString()
+function populateSelects() {
+  const pSelect = document.getElementById("playerSelect");
+  pSelect.innerHTML = "";
+  Object.entries(db.players).forEach(([id, p]) => {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = p.name;
+    pSelect.appendChild(opt);
   });
-  save();
+  pSelect.value = db.activePlayerId;
 
-  if (navigator.vibrate) navigator.vibrate(20);
-
-  // Clear for the next shot. Keep the club selected — you usually hit
-  // the same club several times in a sim session.
-  document.getElementById("carryInput").value = "";
-  document.getElementById("totalInput").value = "";
-  document.getElementById("carryInput").focus();
-  render();
-}
-
-function undoManual() {
-  const round = activeRound();
-  if (!round || !round.shots.length) return;
-  round.shots.pop();
-  save();
-  render();
-}
-
-function selectManualClub(name) {
-  manualClub = (manualClub === name) ? null : name;
-  document.querySelectorAll("#manualClubs .club").forEach(b =>
-    b.classList.toggle("is-last", b.textContent === manualClub)
-  );
-  refreshManual();
-}
-
-function refreshManual() {
-  const round = activeRound();
-  const carry = Number(document.getElementById("carryInput").value);
-  document.getElementById("manualAddBtn").disabled = !(manualClub && carry);
-  document.getElementById("manualUndoBtn").disabled = !(round && round.shots.length);
-  document.getElementById("manualHint").textContent = !manualClub
-    ? "Pick a club, then type what the screen shows."
-    : !carry
-    ? "Type the carry for your " + manualClub + "."
-    : "Add shot, or keep typing.";
-}
-
-/* ---- ui ------------------------------------------------------------ */
-
-function buildClubs() {
-  const wrap = document.getElementById("clubs");
-  BAG.forEach(name => {
-    const b = document.createElement("button");
-    b.className = "club";
-    b.type = "button";
-    b.textContent = name;
-    b.addEventListener("click", () => capture(name));
-    wrap.append(b);
-  });
-
-  // The manual screen gets its own grid — same clubs, minus the "?" marker.
-  const mwrap = document.getElementById("manualClubs");
-  BAG.filter(c => c !== "?").forEach(name => {
-    const b = document.createElement("button");
-    b.className = "club";
-    b.type = "button";
-    b.textContent = name;
-    b.addEventListener("click", () => selectManualClub(name));
-    mwrap.append(b);
+  const cSelect = document.getElementById("courseSelect");
+  cSelect.innerHTML = "";
+  Object.entries(courses).forEach(([id, c]) => {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = c.name;
+    cSelect.appendChild(opt);
   });
 }
-
-const swingCount = round => round.shots.filter(s => s.club !== null).length;
-const strokeCount = round =>
-  round.shots.reduce((n, s) => n + (s.club === null ? 0 : 1) + s.penaltyStrokes, 0);
-
-function refreshControls() {
-  const round = activeRound();
-  const ready = Boolean(currentFix && round);
-  const shot = round && lastShot(round);
-  const taggable = Boolean(round && shot && shot.club !== null);
-
-  document.querySelectorAll(".club").forEach(b => { b.disabled = !ready; });
-
-  // Putts don't need a live fix — they use the traced green position,
-  // which is already sitting in memory the moment a round starts.
-  document.getElementById("puttBtn").disabled = !(round && (ready || currentGreenPosition()));
-
-  const pen = document.getElementById("penaltyBtn");
-  pen.disabled = !taggable;
-  const n = taggable ? shot.penaltyStrokes : 0;
-  pen.dataset.strokes = String(n);
-  pen.textContent = n === 0 ? "Add penalty" : "Penalty +" + n + " — tap to change";
-
-  document.querySelectorAll(".mishit").forEach(b => {
-    b.disabled = !taggable;
-    b.setAttribute("aria-pressed", String(taggable && shot.mishit === b.dataset.kind));
-  });
-
-  const hasShots = Boolean(round && round.shots.length);
-  document.getElementById("undoBtn").disabled = !hasShots;
-  document.getElementById("redoBtn").disabled = !redoStack.length;
-  document.getElementById("holedBtn").disabled = !(ready && hasShots);
-  document.getElementById("pickedUpBtn").disabled = !(ready && hasShots);
-}
-
-/* ============================================================
-   STATS & DEBRIEF — reviewing what's already on the phone
-
-   Neither of these screens introduces new geometry. gradeShot() is a
-   thin wrapper around the SAME computeNudge() the live nudge calls —
-   feed it a past shot's position instead of the current GPS fix, and
-   it tells you what the app would have said. That is exactly the
-   trick blunder_review.py uses on the Latitude; here it runs on-device,
-   so a debrief opens with no signal required once course.json and
-   club-table.json are cached, which they already are after first load.
-   ============================================================ */
 
 function showOverlay(name) {
   currentScreen = name;
@@ -1583,525 +1221,54 @@ function showOverlay(name) {
 
 function closeOverlay() {
   currentScreen = null;
-  debriefState = null;
   document.getElementById("statsScreen").hidden = true;
   document.getElementById("debriefScreen").hidden = true;
   render();
 }
 
-/* Walk a round's flat shot list into per-hole groups. Mirrors
-   reconstruct_holes() in blunder_review.py exactly. */
-function reconstructRoundHoles(round) {
-  let holeNum = round.startHole || 1;
-  const holes = [];
-  let cur = [];
-  for (const shot of round.shots) {
-    cur.push(shot);
-    if (shot.holeEnd) {
-      holes.push({ number: holeNum, shots: cur });
-      cur = [];
-      holeNum++;
-    }
-  }
-  if (cur.length) holes.push({ number: holeNum, shots: cur });
-  return holes;
-}
-
-/* Mirrors grade() in blunder_review.py. nudgeResult is whatever
-   computeNudge() returned for this shot's position — "go" or "layup"
-   are the only kinds worth grading; everything else (clear, in_water,
-   out_of_range, no_data) means there was no decision to make. */
-function gradeShot(club, clubEntry, nudgeResult) {
-  if (nudgeResult.kind !== "go" && nudgeResult.kind !== "layup") return null;
-
-  const recommendsGo = nudgeResult.kind === "go";
-  const carry = clubEntry.safe;
-  const totalLong = clubEntry.long;
-  const wentForIt = carry >= nudgeResult.carryNeeded;
-
-  if (recommendsGo && wentForIt) {
-    return { verdict: "SOLID GO",
-      reason: `${club} carries the water (${carry.toFixed(0)} vs ${nudgeResult.carryNeeded.toFixed(0)} needed).` };
-  }
-  if (recommendsGo && !wentForIt) {
-    return { verdict: "CAUTIOUS",
-      reason: `Nudge said go; ${club} plays it safe instead (${carry.toFixed(0)} vs ${nudgeResult.carryNeeded.toFixed(0)}).` };
-  }
-  if (!recommendsGo && wentForIt) {
-    return { verdict: "BLUNDER",
-      reason: `Nudge said lay up; ${club} went for the carry anyway (${carry.toFixed(0)} vs ${nudgeResult.carryNeeded.toFixed(0)}).` };
-  }
-  // Wasn't chasing the carry — but does this club's OWN rollout risk
-  // trickling into the hazard anyway? A club whose typical total
-  // exceeds the near edge isn't actually a safe lay-up.
-  if (totalLong > nudgeResult.layupLimit) {
-    return { verdict: "BLUNDER",
-      reason: `${club} wasn't going for the carry, but its own numbers (total ${totalLong.toFixed(0)}) `
-        + `don't reliably stay short of the hazard at ${(nudgeResult.layupLimit + 10).toFixed(0)}.` };
-  }
-  return { verdict: "SOLID LAYUP", reason: `${club} stays short of the hazard, as advised.` };
-}
-
-/* Everything the debrief screen needs, computed once when it opens. */
-function buildDebriefData(round) {
-  const holeGroups = reconstructRoundHoles(round);
-  const holesOut = [];
-  const events = [];
-  const todayShots = {};      // club -> [yards]
-  const todayMishits = {};    // club -> {kind: count}
-  const todaySwings = {};     // club -> count
-  let totalPutts = 0;
-  const perHolePutts = [];
-
-  for (const { number, shots } of holeGroups) {
-    const holeDef = course.holes.find(h => h.number === number);
-    const pts = [];
-    let putts = 0;
-
-    shots.forEach((shot, i) => {
-      const clubDisp = displayClub(shot.club) ?? (shot.holeEnd === "picked_up" ? "picked up" : "in");
-      if (shot.club === "Putt") putts++;
-
-      const next = shots[i + 1];
-      let dist = null;
-      if (next && shot.club !== null && shot.club !== "Putt") {
-        const yards = haversineYards(shot, next);
-        if (!shot.penaltyStrokes) dist = Math.round(yards);
-        else if (yards >= REPLAY_THRESHOLD_YARDS) dist = "\u2265" + Math.round(yards);
-      }
-      pts.push({ lat: shot.lat, lng: shot.lng, club: clubDisp, dist,
-                penalty: shot.penaltyStrokes || 0, mishit: shot.mishit || null });
-
-      if (shot.club && !shot.lowConfidence) {
-        todaySwings[clubDisp] = (todaySwings[clubDisp] || 0) + 1;
-        if (shot.mishit) {
-          todayMishits[clubDisp] = todayMishits[clubDisp] || {};
-          todayMishits[clubDisp][shot.mishit] = (todayMishits[clubDisp][shot.mishit] || 0) + 1;
-        } else if (!shot.penaltyStrokes && next && shot.club !== "Putt") {
-          // Every putt now shares the green's traced coordinates, so a
-          // "putt distance" is always ~0 — not data, just an artifact
-          // of the anchor. Excluded from the comparison table the same
-          // way the engine excludes it on the Latitude.
-          const yards = haversineYards(shot, next);
-          todayShots[clubDisp] = todayShots[clubDisp] || [];
-          todayShots[clubDisp].push(yards);
-        }
-      }
-
-      // Nudge grading. Skip recovery shots (right after a penalty) —
-      // same reasoning as blunder_review.py: a drop position often
-      // reads as inside a hazard from GPS boundary jitter, and it was
-      // never a fresh decision anyway.
-      const prevPenalty = i > 0 ? (shots[i - 1].penaltyStrokes || 0) : 0;
-      if (shot.club && shot.club !== "Putt" && shot.club !== "?" && clubTable[clubDisp] && !prevPenalty && holeDef) {
-        const nudgeResult = computeNudge([shot.lat, shot.lng], holeDef, clubTable);
-        const g = gradeShot(clubDisp, clubTable[clubDisp], nudgeResult);
-        if (g) events.push({ hole: number, verdict: g.verdict, reason: g.reason, penalty: shot.penaltyStrokes || 0 });
-      }
-    });
-
-    totalPutts += putts;
-    perHolePutts.push({ hole: number, putts });
-    holesOut.push({
-      number,
-      green: holeDef ? holeDef.green : null,
-      hazards: holeDef ? holeDef.hazards : [],
-      corners: holeDef ? holeDef.corners : null,
-      shots: pts,
-    });
-  }
-
-  const clubRows = Object.keys(todayShots).sort().map(club => {
-    const vals = todayShots[club];
-    const todayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const standing = clubTableRaw && clubTableRaw.clubs[club] ? clubTableRaw.clubs[club].typical : null;
-    const bad = todayMishits[club] ? sumVals(todayMishits[club]) : 0;
-    const swings = todaySwings[club] || (vals.length + bad);
-    return {
-      club, n: vals.length,
-      todayAvg: Math.round(todayAvg * 10) / 10,
-      standing: standing != null ? Math.round(standing * 10) / 10 : null,
-      diff: standing != null ? Math.round((todayAvg - standing) * 10) / 10 : null,
-      mishitBad: bad, mishitSwings: swings,
-    };
-  });
-
-  const mishitRows = Object.entries(todayMishits).map(([club, kinds]) => {
-    const bad = Object.values(kinds).reduce((a, b) => a + b, 0);
-    return { club, swings: todaySwings[club] || bad, bad, breakdown: kinds };
-  });
-
-  const verdictCounts = {};
-  events.forEach(e => { verdictCounts[e.verdict] = (verdictCounts[e.verdict] || 0) + 1; });
-
-  return {
-    round, holes: holesOut, clubRows, mishitRows,
-    putts: { total: totalPutts, perHole: perHolePutts },
-    nudge: { events, counts: verdictCounts },
-  };
-}
-
-/* ---- stats screen ------------------------------------------------ */
-
 function openStats() {
+  const playerId = document.getElementById("playerSelect").value;
+  const table = calculateClubTable(playerId);
   showOverlay("stats");
 
-  document.getElementById("statsGenerated").textContent = clubTableRaw && clubTableRaw.generatedAt
-    ? "Table generated " + new Date(clubTableRaw.generatedAt).toLocaleDateString()
-      + " \u2014 regenerate on the Latitude after new rounds."
-    : "No generation date on this table.";
-
-  // Mishit rates computed live, straight from every real GPS round
-  // sitting in this phone's storage. No Python round-trip needed for
-  // this one — it's a plain count, not a statistical fit, so it's
-  // always current even when the distance table above it is stale.
-  const tally = {};
-  db.rounds.forEach(r => {
-    if (r.source !== "real" || r.mode !== "gps") return;
-    r.shots.forEach(shot => {
-      if (!shot.club || shot.lowConfidence) return;
-      const club = displayClub(shot.club);
-      tally[club] = tally[club] || { swings: 0, bad: {} };
-      tally[club].swings++;
-      if (shot.mishit) tally[club].bad[shot.mishit] = (tally[club].bad[shot.mishit] || 0) + 1;
-    });
-  });
+  document.getElementById("statsPlayerTitle").textContent = db.players[playerId].name + "'s Club Distances";
 
   const tbody = document.querySelector("#statsDistanceTable tbody");
   tbody.innerHTML = "";
-  if (clubTableRaw) {
-    Object.entries(clubTableRaw.clubs)
-      .filter(([club]) => club !== "Putt" && club !== "?")
-      .sort((a, b) => (b[1].typical || 0) - (a[1].typical || 0))
-      .forEach(([club, c]) => {
-        // Merged in from the live tally, not the cached table — the
-        // distance numbers can only be as fresh as the last manual
-        // engine run, but contact rate never needs to wait on that.
-        const t = tally[club];
-        const bad = t ? sumVals(t.bad) : 0;
-        const mishitTxt = t ? Math.round(100 * bad / t.swings) + "% (" + bad + "/" + t.swings + ")" : "\u2014";
-
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${club}</td><td>${c.n}</td><td>${Math.round(c.typical)}</td>`
-          + `<td>${Math.round(c.safe)}</td>`
-          + `<td>${c.carryTypical != null ? Math.round(c.carryTypical) : "\u2014"}</td>`
-          + `<td>${c.carrySafe != null ? Math.round(c.carrySafe) : "\u2014"}</td>`
-          + `<td>${mishitTxt}</td>`;
-        tbody.appendChild(tr);
-      });
-  }
-
-  const mEl = document.getElementById("statsMishits");
-  mEl.innerHTML = "";
-  const rows = Object.entries(tally)
-    .filter(([, v]) => Object.keys(v.bad).length)
-    .sort((a, b) => sumVals(b[1].bad) - sumVals(a[1].bad));
-
-  if (!rows.length) {
-    mEl.innerHTML = "<p style='color:var(--muted);font-size:0.8125rem'>No bad-contact taps yet.</p>";
-  }
-  rows.forEach(([club, v]) => {
-    const bad = sumVals(v.bad);
-    const rate = Math.round(100 * bad / v.swings);
-    const parts = Object.entries(v.bad).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + " " + n).join(", ");
-    const div = document.createElement("div");
-    div.className = "mishit-line";
-    div.innerHTML = `<span class="label">${club} \u2014 ${parts}</span><span>${rate}% (${bad}/${v.swings})</span>`;
-    mEl.appendChild(div);
-  });
-}
-
-const sumVals = obj => Object.values(obj).reduce((a, b) => a + b, 0);
-
-/* ---- debrief screen ------------------------------------------------ */
-
-function openDebrief(roundId) {
-  const round = db.rounds.find(r => r.id === roundId);
-  if (!round || !course || !clubTable) {
-    alert("Course or club data isn't loaded yet \u2014 try again once you have signal.");
-    return;
-  }
-
-  const data = buildDebriefData(round);
-  debriefState = { data, holeIndex: 0 };
-  showOverlay("debrief");
-
-  document.getElementById("debriefTitle").textContent =
-    (course.name || "Round") + " \u2014 " + new Date(round.startedAt).toLocaleDateString();
-
-  renderDebriefSummary(data);
-  renderDebriefHole();
-}
-
-function renderDebriefSummary(data) {
-  const swings = swingCount(data.round);
-  const strokes = strokeCount(data.round);
-  const total = sumVals(data.nudge.counts);
-  const solid = (data.nudge.counts["SOLID GO"] || 0) + (data.nudge.counts["SOLID LAYUP"] || 0);
-  const acc = total ? Math.round(100 * solid / total) : null;
-
-  document.getElementById("debriefStats").innerHTML = `
-    <div><span class="n">${swings}</span><span class="l">swings</span></div>
-    <div><span class="n">${strokes}</span><span class="l">strokes</span></div>
-    <div><span class="n">${data.putts.total}</span><span class="l">putts</span></div>
-    <div><span class="n">${acc != null ? acc + "%" : "\u2014"}</span><span class="l">decisions</span></div>
-  `;
-
-  const tbody = document.querySelector("#debriefClubTable tbody");
-  tbody.innerHTML = "";
-  data.clubRows.forEach(row => {
-    const diffTxt = row.diff == null ? "\u2014" : (row.diff >= 0 ? "+" : "") + row.diff;
-    const diffClass = row.diff > 0 ? "pos" : row.diff < 0 ? "neg" : "";
-    const mishitTxt = row.mishitSwings
-      ? Math.round(100 * row.mishitBad / row.mishitSwings) + "% (" + row.mishitBad + "/" + row.mishitSwings + ")"
-      : "\u2014";
+  Object.entries(table.clubs).forEach(([club, c]) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${row.club}</td><td>${row.n}</td><td>${row.todayAvg}</td>`
-      + `<td>${row.standing ?? "\u2014"}</td><td class="${diffClass}">${diffTxt}</td>`
-      + `<td>${mishitTxt}</td>`;
+    tr.innerHTML = `<td>${club}</td><td>${c.n}</td><td>${Math.round(c.mean)}</td>`
+      + `<td>${Math.round(c.safe)}</td><td>${Math.round(c.mean * c.rolloutFraction)}</td>`
+      + `<td>${Math.round(c.carrySafe)}</td><td>\u2014</td>`;
     tbody.appendChild(tr);
-  });
-
-  const mEl = document.getElementById("debriefMishits");
-  mEl.innerHTML = data.mishitRows.length ? "" :
-    "<p style='color:var(--muted);font-size:0.8125rem'>No bad-contact taps this round.</p>";
-  data.mishitRows.forEach(row => {
-    const rate = Math.round(100 * row.bad / row.swings);
-    const parts = Object.entries(row.breakdown).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + " " + n).join(", ");
-    const div = document.createElement("div");
-    div.className = "mishit-line";
-    div.innerHTML = `<span class="label">${row.club} \u2014 ${parts}</span><span>${rate}% (${row.bad}/${row.swings})</span>`;
-    mEl.appendChild(div);
-  });
-
-  const threePlus = data.putts.perHole.filter(p => p.putts >= 3).map(p => p.hole);
-  const onePutts = data.putts.perHole.filter(p => p.putts === 1).map(p => p.hole);
-  const pillRow = (arr, cls) => arr.length
-    ? `<p class="pill-row">${arr.map(h => `<span class="pill ${cls}">H${h}</span>`).join("")}</p>` : "";
-  document.getElementById("debriefPutts").innerHTML =
-    `<div class="mishit-line"><span class="label">Total</span><span>${data.putts.total}</span></div>`
-    + pillRow(threePlus, "three") + pillRow(onePutts, "one");
-
-  document.getElementById("debriefNudgeSummary").innerHTML = total === 0
-    ? "<p style='color:var(--muted);font-size:0.8125rem'>No holes had water in play on your line.</p>"
-    : `<div class="mishit-line"><span class="label">Decisions graded</span><span>${total}</span></div>`
-    + `<div class="mishit-line"><span class="label">Blunders</span><span>${data.nudge.counts["BLUNDER"] || 0}</span></div>`
-    + `<div class="mishit-line"><span class="label">Cautious</span><span>${data.nudge.counts["CAUTIOUS"] || 0}</span></div>`;
-
-  const neEl = document.getElementById("debriefNudgeEvents");
-  neEl.innerHTML = "";
-  data.nudge.events.forEach(e => {
-    const cls = e.verdict === "BLUNDER" ? "blunder" : e.verdict === "CAUTIOUS" ? "cautious" : "solid";
-    const div = document.createElement("div");
-    div.className = "nudge-event";
-    div.innerHTML = `<span class="tag ${cls}">H${e.hole}</span>${e.reason}`
-      + (e.penalty ? ` \u2192 cost ${e.penalty} stroke(s)` : "");
-    neEl.appendChild(div);
-  });
-}
-
-function renderDebriefHole() {
-  const { data, holeIndex } = debriefState;
-  const hole = data.holes[holeIndex];
-
-  document.getElementById("holeNavLabel").textContent = "Hole " + hole.number;
-  document.getElementById("holePrev").disabled = holeIndex === 0;
-  document.getElementById("holeNext").disabled = holeIndex === data.holes.length - 1;
-
-  drawHoleCartoon(hole);
-
-  const swings = hole.shots.filter(s => s.club !== "in" && s.club !== "picked up").length;
-  const putts = hole.shots.filter(s => s.club === "Putt").length;
-  document.getElementById("holeCartoonCaption").textContent = swings + " shots, " + putts + " putts";
-}
-
-/* The schematic hole. Every coordinate comes from course.json (cached
-   locally) and this round's own logged shots — no basemap tile, no
-   network call, works standing in a dead spot as easily as at home. */
-function drawHoleCartoon(hole) {
-  const svg = document.getElementById("holeCartoon");
-  svg.innerHTML = "";
-  const NS = "http://www.w3.org/2000/svg";
-  const el = (tag, attrs) => {
-    const e = document.createElementNS(NS, tag);
-    Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
-    return e;
-  };
-
-  const pts = [];
-  if (hole.green) pts.push([hole.green.lat, hole.green.lng]);
-  (hole.hazards || []).forEach(hz => hz.polygon.forEach(p => pts.push(p)));
-  (hole.corners || []).forEach(c => pts.push([c.lat, c.lng]));
-  hole.shots.forEach(s => pts.push([s.lat, s.lng]));
-  if (!pts.length) return;
-
-  const lat0 = pts.reduce((a, p) => a + p[0], 0) / pts.length;
-  const lng0 = pts.reduce((a, p) => a + p[1], 0) / pts.length;
-  const toXY = projector(lat0, lng0);
-
-  // Orient every hole the same way: first shot at the bottom, green at
-  // the top, regardless of the hole's true compass bearing. Without
-  // this, a hole running east-west and one running north-south look
-  // arbitrarily different call to call — there's no fixed "up." Rotate
-  // the whole local frame so the tee-to-green vector always points
-  // north, which the existing screen-flip then puts at the top.
-  const anchorFrom = hole.shots.length ? hole.shots[0] : null;
-  const anchorTo = hole.green || (hole.shots.length ? hole.shots[hole.shots.length - 1] : null);
-  let angle = 0;
-  if (anchorFrom && anchorTo) {
-    const [fx, fy] = toXY(anchorFrom.lat, anchorFrom.lng);
-    const [tx, ty] = toXY(anchorTo.lat, anchorTo.lng);
-    const bearing = Math.atan2(tx - fx, ty - fy);   // clockwise from north
-    // Rotating a vector already pointing at compass bearing θ by +θ
-    // (with this rotation-matrix convention: x=east, y=north, positive
-    // angle = counter-clockwise) aligns it with north. Getting this
-    // backwards silently flips east-running holes onto their heads
-    // while doing nothing visible to north-running ones — caught only
-    // by testing multiple bearings, not by eyeballing one hole.
-    angle = bearing;
-  }
-  const toRotatedXY = (lat, lng) => {
-    const [x, y] = toXY(lat, lng);
-    return [x * Math.cos(angle) - y * Math.sin(angle),
-            x * Math.sin(angle) + y * Math.cos(angle)];
-  };
-
-  const xy = pts.map(p => toRotatedXY(p[0], p[1]));
-  const xs = xy.map(p => p[0]), ys = xy.map(p => p[1]);
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  const minY = Math.min(...ys), maxY = Math.max(...ys);
-  const spanX = Math.max(maxX - minX, 20), spanY = Math.max(maxY - minY, 20);
-  const PAD = 28, SIZE = 320;
-  const scale = Math.min((SIZE - 2 * PAD) / spanX, (SIZE - 2 * PAD) / spanY);
-  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
-
-  // SVG y grows downward; flip so "north" (post-rotation, always the
-  // tee-to-green direction) reads as "up" on screen.
-  const project = (lat, lng) => {
-    const [x, y] = toRotatedXY(lat, lng);
-    return [SIZE / 2 + (x - cx) * scale, SIZE / 2 - (y - cy) * scale];
-  };
-
-  (hole.hazards || []).forEach(hz => {
-    const points = hz.polygon.map(p => project(p[0], p[1]).join(",")).join(" ");
-    svg.appendChild(el("polygon", { points, class: "hz-shape" }));
-  });
-
-  (hole.corners || []).forEach(c => {
-    const [x, y] = project(c.lat, c.lng);
-    svg.appendChild(el("circle", { cx: x, cy: y, r: 6, class: "corner-shape" }));
-  });
-
-  if (hole.green) {
-    const [x, y] = project(hole.green.lat, hole.green.lng);
-    svg.appendChild(el("circle", { cx: x, cy: y, r: 8, class: "green-shape" }));
-  }
-
-  if (hole.shots.length > 1) {
-    const linePts = hole.shots.map(s => project(s.lat, s.lng).join(",")).join(" ");
-    svg.appendChild(el("polyline", { points: linePts, class: "shot-line" }));
-  }
-
-  hole.shots.forEach((s, i) => {
-    const [x, y] = project(s.lat, s.lng);
-    const cls = "shot-dot" + (s.penalty ? " penal" : "") + (s.mishit ? " mishit" : "");
-    svg.appendChild(el("circle", { cx: x, cy: y, r: 6, class: cls }));
-    const t = el("text", { x, y: y - 9, class: "shot-num", "text-anchor": "middle" });
-    t.textContent = String(i + 1);
-    svg.appendChild(t);
   });
 }
 
 function renderRounds() {
   const list = document.getElementById("rounds");
   list.innerHTML = "";
-  document.getElementById("roundsEmpty").hidden = db.rounds.length > 0;
-  document.getElementById("exportBtn").disabled = db.rounds.length === 0;
-
   [...db.rounds].reverse().forEach(round => {
     const li = document.createElement("li");
-
     const date = document.createElement("span");
     date.className = "date";
-    date.textContent = new Date(round.startedAt)
-      .toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    date.textContent = new Date(round.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
     const meta = document.createElement("span");
-    meta.className = "meta"
-      + (round.source === "sim" ? " is-sim" : "")
-      + (round.source === "synthetic" ? " is-synth" : "");
-    meta.textContent = round.mode === "manual"
-      ? "sim \u00B7 " + round.shots.length + " shots typed"
-      : (round.source === "synthetic" ? "synthetic \u00B7 " : "") +
-        swingCount(round) + " swings \u00B7 " + strokeCount(round) + " strokes";
+    meta.className = "meta";
+    meta.textContent = (db.players[round.playerId]?.name || "Player") + " \u00B7 " + round.shots.length + " shots";
 
     const del = document.createElement("button");
     del.className = "del";
-    del.type = "button";
     del.textContent = "\u00D7";
-    del.setAttribute("aria-label", "Delete round");
-    del.addEventListener("click", event => {
-      event.stopPropagation();   // don't also open the debrief
-      deleteRound(round.id);
-    });
+    del.onclick = e => { e.stopPropagation(); deleteRound(round.id); };
 
     li.append(date, meta, del);
-
-    // Manual (sim) rounds have no GPS shots and no course geometry to
-    // grade against — only real GPS rounds with shots open a debrief.
-    if (round.mode === "gps" && round.shots.length) {
-      li.classList.add("tappable");
-      li.addEventListener("click", () => openDebrief(round.id));
-    }
-
     list.append(li);
   });
 }
 
-function renderManual(round) {
-  document.getElementById("manualCount").textContent = round.shots.length + " shots";
-
-  const log = document.getElementById("manualLog");
-  log.innerHTML = "";
-  document.getElementById("manualEmpty").hidden = round.shots.length > 0;
-
-  // Newest first — you want to see the shot you just typed.
-  [...round.shots].reverse().forEach((shot, idx) => {
-    const i = round.shots.length - idx;
-    const li = document.createElement("li");
-
-    const n = document.createElement("span");
-    n.className = "n";
-    n.textContent = String(i).padStart(2, "0");
-
-    const club = document.createElement("span");
-    club.className = "club-name";
-    club.textContent = shot.club;
-
-    const roll = shot.total - shot.carry;
-    const note = document.createElement("span");
-    note.className = "note";
-    note.textContent = roll > 0 ? "+" + Math.round(roll) + " roll" : "no roll";
-
-    const yds = document.createElement("span");
-    yds.className = "yds";
-    yds.innerHTML = Math.round(shot.carry) +
-      ' <span class="total">/ ' + Math.round(shot.total) + "</span>";
-
-    li.append(n, club, note, yds);
-    log.append(li);
-  });
-
-  refreshManual();
-}
-
 function render() {
-  // Stats and debrief are full-screen overlays reached from the start
-  // screen, not part of the round lifecycle. While one is open, a stray
-  // render() from GPS or a background event should not silently flip
-  // the screen back underneath the user.
   if (currentScreen) return;
-
   const round = activeRound();
   const manual = round && round.mode === "manual";
 
@@ -2110,82 +1277,68 @@ function render() {
   document.getElementById("manualScreen").hidden = !manual;
 
   if (!round) { renderRounds(); return; }
-  if (manual) { renderManual(round); return; }
-
-  const tag = document.getElementById("sourceTag");
-  tag.textContent = round.source === "sim" ? "SIMULATOR"
-                  : round.source === "synthetic" ? "SYNTHETIC" : "REAL";
-  tag.classList.toggle("is-sim", round.source === "sim");
-  tag.classList.toggle("is-synth", round.source === "synthetic");
-
-  document.getElementById("strokes").textContent =
-    swingCount(round) + " swings \u00B7 " + strokeCount(round) + " strokes";
 
   document.getElementById("holeNum").textContent = currentHole(round);
-
-  const last = lastShot(round);
-  document.querySelectorAll(".club").forEach(b =>
-    b.classList.toggle("is-last", Boolean(last) && b.textContent === displayClub(last.club))
-  );
+  document.getElementById("strokes").textContent = round.shots.length + " swings";
 
   const log = document.getElementById("log");
   log.innerHTML = "";
-  document.getElementById("empty").hidden = round.shots.length > 0;
-
   round.shots.forEach((shot, i) => {
     const dist = distanceFor(shot, round.shots[i + 1]);
     const li = document.createElement("li");
-    if (shot.club === null) li.classList.add("is-end");
-
-    const n = document.createElement("span");
-    n.className = "n";
-    n.textContent = String(i + 1).padStart(2, "0");
-
-    const club = document.createElement("span");
-    club.className = "club-name";
-    club.textContent = displayClub(shot.club) ?? (shot.holeEnd === "picked_up" ? "up" : "in");
-
-    const note = document.createElement("span");
-    note.className = "note" + (shot.penaltyStrokes ? " is-penal" : "");
-    note.textContent = shot.penaltyStrokes ? "+" + shot.penaltyStrokes + " penalty"
-      : shot.mishit ? shot.mishit + " \u2014 excluded from average"
-      : shot.holeEnd === "picked_up" ? "picked up \u2014 score is a floor"
-      : shot.fromGreen ? "green (traced)"
-      : "\u00B1" + Math.round(shot.accuracy) + "m";
-
-    const yds = document.createElement("span");
-    if (dist.kind === "measured")      { yds.className = "yds";              yds.textContent = Math.round(dist.yards) + " yds"; }
-    else if (dist.kind === "floor")    { yds.className = "yds floor";        yds.textContent = "\u2265 " + Math.round(dist.yards) + " yds"; }
-    else if (dist.kind === "unknown")  { yds.className = "yds void";         yds.textContent = "replayed"; }
-    else if (dist.kind === "pending")  { yds.className = "yds pending";      yds.textContent = "in play"; }
-    else if (dist.kind === "putt")     { yds.className = "yds pending";      yds.textContent = "putt"; }
-    else                               { yds.className = "yds pending";      yds.textContent = "\u2014"; }
-
-    li.append(n, club, note, yds);
+    li.innerHTML = `<span class="n">${i+1}</span><span class="club-name">${shot.club}</span>`
+      + `<span class="note">${shot.penaltyStrokes ? '+1 pen' : ''}</span>`
+      + `<span class="yds">${dist.yards ? Math.round(dist.yards) + ' yds' : '\u2014'}</span>`;
     log.append(li);
   });
 
-  refreshControls();
   renderNudge();
 }
 
-/* ---- wire it up ------------------------------------------------------ */
+/* ---- init ---- */
 
 db = load();
-checkStaleRound();
-buildClubs();
+courses = loadCourses();
+
+// Built-in default course (Glendale) fallback
+if (!courses.glendale) {
+  courses.glendale = {
+    id: "glendale",
+    name: "Glendale Golf & CC",
+    holes: [
+      { number: 1, green: { lat: 49.87715, lng: -97.31516 }, hazards: [] },
+      { number: 2, green: { lat: 49.87978, lng: -97.31506 }, hazards: [] }
+    ]
+  };
+  saveCourses();
+}
+
+populateSelects();
+
+document.getElementById("playerSelect").addEventListener("change", e => {
+  db.activePlayerId = e.target.value;
+  save();
+});
+
+document.getElementById("newPlayerBtn").addEventListener("click", () => {
+  const name = prompt("Player Name:");
+  if (name) {
+    const id = name.toLowerCase().replace(/[^a-z0-9]/g, "_");
+    db.players[id] = { name, priors: DEFAULT_PRIORS_GUEST };
+    db.activePlayerId = id;
+    save();
+    populateSelects();
+  }
+});
 
 document.querySelectorAll(".start-choice").forEach(btn =>
   btn.addEventListener("click", () => startRound(btn.dataset.source, btn.dataset.mode))
 );
+
 document.getElementById("penaltyBtn").addEventListener("click", cyclePenalty);
 document.getElementById("undoBtn").addEventListener("click", undo);
-document.getElementById("redoBtn").addEventListener("click", redo);
-document.querySelectorAll(".mishit").forEach(b =>
-  b.addEventListener("click", () => toggleMishit(b.dataset.kind))
-);
 document.getElementById("holedBtn").addEventListener("click", () => capture(null, "holed"));
-document.getElementById("puttBtn").addEventListener("click", () => capture(PUTT_BUTTON));
+document.getElementById("puttBtn").addEventListener("click", () => capture("Putt"));
 document.getElementById("pickedUpBtn").addEventListener("click", () => capture(null, "picked_up"));
 document.getElementById("endBtn").addEventListener("click", endRound);
 document.getElementById("exportBtn").addEventListener("click", exportJson);
@@ -2193,50 +1346,24 @@ document.getElementById("exportBtn").addEventListener("click", exportJson);
 document.getElementById("statsLink").addEventListener("click", openStats);
 document.getElementById("statsBack").addEventListener("click", closeOverlay);
 document.getElementById("debriefBack").addEventListener("click", closeOverlay);
-document.getElementById("holePrev").addEventListener("click", () => {
-  if (debriefState && debriefState.holeIndex > 0) {
-    debriefState.holeIndex--;
-    renderDebriefHole();
-  }
-});
-document.getElementById("holeNext").addEventListener("click", () => {
-  if (debriefState && debriefState.holeIndex < debriefState.data.holes.length - 1) {
-    debriefState.holeIndex++;
-    renderDebriefHole();
-  }
+
+document.getElementById("importInput").addEventListener("change", e => {
+  if (e.target.files[0]) importJson(e.target.files[0]);
 });
 
-// manual / sim screen
-document.getElementById("manualAddBtn").addEventListener("click", addManualShot);
-document.getElementById("manualUndoBtn").addEventListener("click", undoManual);
-document.getElementById("manualEndBtn").addEventListener("click", endRound);
-document.getElementById("carryInput").addEventListener("input", refreshManual);
-document.getElementById("totalInput").addEventListener("input", refreshManual);
-// Enter in the total field adds the shot — fast keyboard entry.
-document.getElementById("totalInput").addEventListener("keydown", e => {
-  if (e.key === "Enter") addManualShot();
-});
-document.getElementById("carryInput").addEventListener("keydown", e => {
-  if (e.key === "Enter") document.getElementById("totalInput").focus();
+document.getElementById("importCourseInput").addEventListener("change", e => {
+  if (e.target.files[0]) importCourseJson(e.target.files[0]);
 });
 
-document.getElementById("holeStrip").addEventListener("click", () => {
-  const round = activeRound();
-  if (!round) return;
-  const answer = prompt("Which hole are you on?", currentHole(round));
-  const n = Number(answer);
-  if (n >= 1 && n <= HOLES_PER_ROUND) setHole(n);
+BAG.forEach(name => {
+  const b = document.createElement("button");
+  b.className = "club";
+  b.textContent = name;
+  b.onclick = () => capture(name);
+  document.getElementById("clubs").appendChild(b);
 });
 
-document.getElementById("importInput").addEventListener("change", event => {
-  const file = event.target.files[0];
-  if (file) importJson(file);
-  event.target.value = "";
-});
-
-showIdle("Tap the club in your hand.");
 render();
-loadRefData();
 </script>
 </body>
 </html>
