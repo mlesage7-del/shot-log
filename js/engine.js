@@ -1,47 +1,46 @@
-
 /*
  * SHOT LOG - ENGINE.JS
- * UPDATE DATE & TIME: 2026-08-12 13:38:27 CDT
+ * UPDATE DATE & TIME: 2026-08-12 14:26:36 CDT
  */
 
 "use strict";
 
-const STORAGE_KEY = "shotlog:v1";
-const COURSES_KEY = "shotlog:courses";
-const SCHEMA_VERSION = 6;
-const HOLES_PER_ROUND = 18;
+var STORAGE_KEY = "shotlog:v1";
+var COURSES_KEY = "shotlog:courses";
+var SCHEMA_VERSION = 6;
+var HOLES_PER_ROUND = 18;
 
-const BAG = ["Dr","3w","5h","3i","6i","7i","8i","9i","PW","S","LW","?"];
-const PUTT_BUTTON = "Putt";
-const CLUB_ALIAS = { P: "PW" };
-const displayClub = c => (c == null ? c : (CLUB_ALIAS[c] || c));
+var BAG = ["Dr","3w","5h","3i","6i","7i","8i","9i","PW","S","LW","?"];
+var PUTT_BUTTON = "Putt";
+var CLUB_ALIAS = { P: "PW" };
+var displayClub = c => (c == null ? c : (CLUB_ALIAS[c] || c));
 
-const REPLAY_THRESHOLD_YARDS = 20;
-const CLEAR_MARGIN_YARDS = 8;
-const LAYUP_MARGIN_YARDS = 10;
+var REPLAY_THRESHOLD_YARDS = 20;
+var CLEAR_MARGIN_YARDS = 8;
+var LAYUP_MARGIN_YARDS = 10;
 
-const EARTH_RADIUS_M = 6371000;
-const M_PER_DEG_LAT = 111320;
-const M_TO_YARDS = 1.09361;
+var EARTH_RADIUS_M = 6371000;
+var M_PER_DEG_LAT = 111320;
+var M_TO_YARDS = 1.09361;
 
-const DEFAULT_PRIORS_MATT = {
+var DEFAULT_PRIORS_MATT = {
   Dr: [202, 24], '3w': [195, 23], '5h': [180, 18], '3i': [170, 17],
   '6i': [160, 14], '7i': [150, 14], '8i': [140, 13], '9i': [125, 11],
   PW: [115, 10], S: [75, 8], LW: [60, 7]
 };
 
-const DEFAULT_PRIORS_GUEST = {
+var DEFAULT_PRIORS_GUEST = {
   Dr: [210, 25], '3w': [190, 22], '5h': [175, 18], '3i': [165, 16],
   '6i': [155, 14], '7i': [145, 13], '8i': [135, 12], '9i': [120, 11],
   PW: [110, 10], S: [80, 8], LW: [60, 7]
 };
 
-const Z75 = 0.6745;
-const Z20 = -0.8416;
-const Z80 = 0.8416;
-const PRIOR_WEIGHT = 5.0;
+var Z75 = 0.6745;
+var Z20 = -0.8416;
+var Z80 = 0.8416;
+var PRIOR_WEIGHT = 5.0;
 
-const DEFAULT_ROLLOUT = {
+var DEFAULT_ROLLOUT = {
   Dr: 0.82, '3w': 0.84, '5h': 0.86, '3i': 0.88,
   '6i': 0.91, '7i': 0.92, '8i': 0.93, '9i': 0.94,
   PW: 0.95, S: 0.97, LW: 0.97
@@ -134,8 +133,8 @@ function fitClubEngine(club, clean, censored, ratiosFromSim, playerPriors) {
 }
 
 function calculateClubTable(playerId) {
-  const player = db.players[playerId] || db.players.matt;
-  const playerRounds = db.rounds.filter(r => (r.playerId || "matt") === playerId);
+  const player = (window.db && window.db.players[playerId]) ? window.db.players[playerId] : (window.db ? window.db.players.matt : { priors: DEFAULT_PRIORS_MATT });
+  const playerRounds = window.db ? window.db.rounds.filter(r => (r.playerId || "matt") === playerId) : [];
 
   const measured = {};
   const floors = {};
