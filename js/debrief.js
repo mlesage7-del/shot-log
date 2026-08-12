@@ -1,15 +1,242 @@
 /*
- * SHOT LOG - JS/DEBRIEF.JS
- * UPDATE DATE & TIME: 2026-08-12 12:41:00 CDT
- * PRIMARY CHANGES:
- * 1. Enlarged green circle radius in SVG hole cartoon view.
- * 2. Offset 'X' penalty marker next to hazard entry shot circle.
- * 3. Removed terminal holed-out duplicate shot numbers.
- * 4. Added hole-specific club performance table below cartoon view.
- * 5. Added advanced debrief penalty analytics (5-round trend & net stroke impact).
+ * SHOT LOG - DEBRIEF.JS
+ * UPDATE DATE & TIME: 2026-08-12 14:23:15 CDT
  */
 
 "use strict";
+
+function reconstructRoundHoles(round) {
+  let holeNum = round.startHole || 1;
+  const holes = [];
+  let cur = [];
+  for (const shot of round.shots) {
+    cur.push(shot);
+    if (shot.holeEnd) {
+      holes.push({ number: holeNum, shots: cur });
+      cur = [];
+      holeNum++;
+    }
+  }
+  if (cur.length) holes.push({ number: holeNum, shots: cur });
+  return holes;
+}
+
+function gradeShot(club, clubEntry, nudgeResult) {
+  if (nudgeResult.kind !== "go" && nudgeResult.kind !== "layup") return null;
+
+  const recommendsGo = nudgeResult.kind === "go";
+  const carry = clubEntry.carrySafe;
+  const totalLong = clubEntry.long;
+  const wentForIt = carry >= nudgeResult.carryNeeded;
+
+  if (recommendsGo && wentForIt) {
+    return { verdict: "SOLID GO", reason: `${club} carries water (${carry.toFixed(0)} vs ${nudgeResult.carryNeeded.toFixed(0)} needed).` };
+  }
+  if (recommendsGo && !wentForIt) {
+    return { verdict: "CAUTIOUS", reason: `Nudge said go; ${club} played safe (${carry.toFixed(0)} vs ${nudgeResult.carryNeeded.toFixed(0)}).` };
+  }
+  if (!recommendsGo && wentForIt) {
+    return { verdict: "BLUNDER", reason: `Nudge said lay up; ${club} went for carry (${carry.toFixed(0)} vs ${nudgeResult.carryNeeded.toFixed(0)}).` };
+  }
+  if (totalLong > nudgeResult.layupLimit) {
+    return { verdict: "BLUNDER", reason: `${club} total rollout (${totalLong.toFixed(0)}) risks reaching hazard at ${(nudgeResult.layupLimit + 10).toFixed(0)}.` };
+  }
+  return { verdict: "SOLID LAYUP", reason: `${club} stays short of hazard, as advised.` };
+}
+
+function buildDebriefData(round) {
+  const course = courses[round.courseId];
+  const clubTable = calculateClubTable(round.playerId || "matt");
+  const holeGroups = reconstructRoundHoles(round);
+  const holesOut = [];
+  const events = [];
+  const todayShots = {};
+  const todayMishits = {};
+  const todaySwings = {};
+  let totalPutts = 0;
+  const perHolePutts = [];
+
+  for (const { number, shots } of holeGroups) {
+    const holeDef = course ? course.holes.find(h => h.number === number) : null;
+    const pts = [];
+    let putts = 0;
+
+    shots.forEach((shot, i) => {
+      const clubDisp = displayClub(shot.club) ?? (shot.holeEnd === "picked_up" ? "picked up" : "in");
+      if (shot.club === "Putt") putts++;
+
+      const next = shots[i + 1];
+      let dist = null;
+      if (next && shot.club !== null && shot.club !== "Putt") {
+        const yards = haversineYards(shot, next);
+        if (!shot.penaltyStrokes) dist = Math.round(yards);
+        else if (yards >= REPLAY_THRESHOLD_YARDS) dist = "\u2265" + Math.round(yards);
+      }
+      pts.push({ lat: shot.lat, lng: shot.lng, club: clubDisp, dist, penalty: shot.penaltyStrokes || 0, mishit: shot.mishit || null });
+
+      if (shot.club && !shot.lowConfidence) {
+        todaySwings[clubDisp] = (todaySwings[clubDisp] || 0) + 1;
+        if (shot.mishit) {
+          todayMishits[clubDisp] = todayMishits[clubDisp] || {};
+          todayMishits[clubDisp][shot.mishit] = (todayMishits[clubDisp][shot.mishit] || 0) + 1;
+        } else if (!shot.penaltyStrokes && next && shot.club !== "Putt") {
+          const yards = haversineYards(shot, next);
+          todayShots[clubDisp] = todayShots[clubDisp] || [];
+          todayShots[clubDisp].push(yards);
+        }
+      }
+
+      const prevPenalty = i > 0 ? (shots[i - 1].penaltyStrokes || 0) : 0;
+      if (shot.club && shot.club !== "Putt" && shot.club !== "?" && clubTable.clubs[clubDisp] && !prevPenalty && holeDef) {
+        const nudgeResult = computeNudge([shot.lat, shot.lng], holeDef, clubTable);
+        const g = gradeShot(clubDisp, clubTable.clubs[clubDisp], nudgeResult);
+        if (g) events.push({ hole: number, verdict: g.verdict, reason: g.reason, penalty: shot.penaltyStrokes || 0 });
+      }
+    });
+
+    totalPutts += putts;
+    perHolePutts.push({ hole: number, putts });
+    holesOut.push({
+      number,
+      green: holeDef ? holeDef.green : null,
+      hazards: holeDef ? holeDef.hazards : [],
+      corners: holeDef ? holeDef.corners : null,
+      shots: pts,
+    });
+  }
+
+  const sumVals = obj => Object.values(obj).reduce((a, b) => a + b, 0);
+
+  const clubRows = Object.keys(todayShots).sort().map(club => {
+    const vals = todayShots[club];
+    const todayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const standing = clubTable.clubs[club] ? clubTable.clubs[club].typical : null;
+    const bad = todayMishits[club] ? sumVals(todayMishits[club]) : 0;
+    const swings = todaySwings[club] || (vals.length + bad);
+    return {
+      club, n: vals.length,
+      todayAvg: Math.round(todayAvg * 10) / 10,
+      standing: standing != null ? Math.round(standing * 10) / 10 : null,
+      diff: standing != null ? Math.round((todayAvg - standing) * 10) / 10 : null,
+      mishitBad: bad, mishitSwings: swings,
+    };
+  });
+
+  const mishitRows = Object.entries(todayMishits).map(([club, kinds]) => {
+    const bad = Object.values(kinds).reduce((a, b) => a + b, 0);
+    return { club, swings: todaySwings[club] || bad, bad, breakdown: kinds };
+  });
+
+  const verdictCounts = {};
+  events.forEach(e => { verdictCounts[e.verdict] = (verdictCounts[e.verdict] || 0) + 1; });
+
+  return {
+    round, holes: holesOut, clubRows, mishitRows,
+    putts: { total: totalPutts, perHole: perHolePutts },
+    nudge: { events, counts: verdictCounts },
+  };
+}
+
+function openDebrief(roundId) {
+  const round = db.rounds.find(r => r.id === roundId);
+  if (!round) return;
+
+  const data = buildDebriefData(round);
+  debriefState = { data, holeIndex: 0 };
+  showOverlay("debrief");
+
+  const course = courses[round.courseId];
+  document.getElementById("debriefTitle").textContent =
+    (course ? course.name : "Round") + " \u2014 " + new Date(round.startedAt).toLocaleDateString();
+
+  renderDebriefSummary(data);
+  renderDebriefHole();
+}
+
+function renderDebriefSummary(data) {
+  const swings = swingCount(data.round);
+  const strokes = strokeCount(data.round);
+  const sumVals = obj => Object.values(obj).reduce((a, b) => a + b, 0);
+  const total = sumVals(data.nudge.counts);
+  const solid = (data.nudge.counts["SOLID GO"] || 0) + (data.nudge.counts["SOLID LAYUP"] || 0);
+  const acc = total ? Math.round(100 * solid / total) : null;
+
+  document.getElementById("debriefStats").innerHTML = `
+    <div><span class="n">${swings}</span><span class="l">swings</span></div>
+    <div><span class="n">${strokes}</span><span class="l">strokes</span></div>
+    <div><span class="n">${data.putts.total}</span><span class="l">putts</span></div>
+    <div><span class="n">${acc != null ? acc + "%" : "\u2014"}</span><span class="l">decisions</span></div>
+  `;
+
+  renderDebriefPenaltyAnalysis(data);
+
+  const tbody = document.querySelector("#debriefClubTable tbody");
+  tbody.innerHTML = "";
+  data.clubRows.forEach(row => {
+    const diffTxt = row.diff == null ? "\u2014" : (row.diff >= 0 ? "+" : "") + row.diff;
+    const diffClass = row.diff > 0 ? "pos" : row.diff < 0 ? "neg" : "";
+    const mishitTxt = row.mishitSwings
+      ? Math.round(100 * row.mishitBad / row.mishitSwings) + "% (" + row.mishitBad + "/" + row.mishitSwings + ")"
+      : "\u2014";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${row.club}</td><td>${row.n}</td><td>${row.todayAvg}</td>`
+      + `<td>${row.standing ?? "\u2014"}</td><td class="${diffClass}">${diffTxt}</td>`
+      + `<td>${mishitTxt}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const mEl = document.getElementById("debriefMishits");
+  mEl.innerHTML = data.mishitRows.length ? "" : "<p style='color:var(--muted);font-size:0.8125rem'>No bad contact taps.</p>";
+  data.mishitRows.forEach(row => {
+    const rate = Math.round(100 * row.bad / row.swings);
+    const parts = Object.entries(row.breakdown).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + " " + n).join(", ");
+    const div = document.createElement("div");
+    div.className = "mishit-line";
+    div.innerHTML = `<span class="label">${row.club} \u2014 ${parts}</span><span>${rate}% (${row.bad}/${row.swings})</span>`;
+    mEl.appendChild(div);
+  });
+
+  const threePlus = data.putts.perHole.filter(p => p.putts >= 3).map(p => p.hole);
+  const onePutts = data.putts.perHole.filter(p => p.putts === 1).map(p => p.hole);
+  const pillRow = (arr, cls) => arr.length
+    ? `<p class="pill-row">${arr.map(h => `<span class="pill ${cls}">H${h}</span>`).join("")}</p>` : "";
+  document.getElementById("debriefPutts").innerHTML =
+    `<div class="mishit-line"><span class="label">Total</span><span>${data.putts.total}</span></div>`
+    + pillRow(threePlus, "three") + pillRow(onePutts, "one");
+
+  document.getElementById("debriefNudgeSummary").innerHTML = total === 0
+    ? "<p style='color:var(--muted);font-size:0.8125rem'>No water decisions graded.</p>"
+    : `<div class="mishit-line"><span class="label">Decisions graded</span><span>${total}</span></div>`
+    + `<div class="mishit-line"><span class="label">Blunders</span><span>${data.nudge.counts["BLUNDER"] || 0}</span></div>`
+    + `<div class="mishit-line"><span class="label">Cautious</span><span>${data.nudge.counts["CAUTIOUS"] || 0}</span></div>`;
+
+  const neEl = document.getElementById("debriefNudgeEvents");
+  neEl.innerHTML = "";
+  data.nudge.events.forEach(e => {
+    const cls = e.verdict === "BLUNDER" ? "blunder" : e.verdict === "CAUTIOUS" ? "cautious" : "solid";
+    const div = document.createElement("div");
+    div.className = "nudge-event";
+    div.innerHTML = `<span class="tag ${cls}">H${e.hole}</span>${e.reason}`
+      + (e.penalty ? ` \u2192 cost ${e.penalty} stroke(s)` : "");
+    neEl.appendChild(div);
+  });
+}
+
+function renderDebriefHole() {
+  const { data, holeIndex } = debriefState;
+  const hole = data.holes[holeIndex];
+
+  document.getElementById("holeNavLabel").textContent = "Hole " + hole.number;
+  document.getElementById("holePrev").disabled = holeIndex === 0;
+  document.getElementById("holeNext").disabled = holeIndex === data.holes.length - 1;
+
+  drawHoleCartoon(hole);
+  renderHoleClubTable(hole);
+
+  const swings = hole.shots.filter(s => s.club !== "in" && s.club !== "picked up").length;
+  const putts = hole.shots.filter(s => s.club === "Putt").length;
+  document.getElementById("holeCartoonCaption").textContent = swings + " shots, " + putts + " putts";
+}
 
 function drawHoleCartoon(hole) {
   const svg = document.getElementById("holeCartoon");
@@ -61,42 +288,35 @@ function drawHoleCartoon(hole) {
     return [SIZE / 2 + (x - cx) * scale, SIZE / 2 - (y - cy) * scale];
   };
 
-  // 1. Draw Hazards
   (hole.hazards || []).forEach(hz => {
     const points = hz.polygon.map(p => project(p[0], p[1]).join(",")).join(" ");
     svg.appendChild(el("polygon", { points, class: "hz-shape" }));
   });
 
-  // 2. Draw Dogleg Corners
   (hole.corners || []).forEach(c => {
     const [x, y] = project(c.lat, c.lng);
     svg.appendChild(el("circle", { cx: x, cy: y, r: 6, class: "corner-shape" }));
   });
 
-  // 3. Draw Green (WISHLIST ITEM: ENLARGED RADIUS TO 14px)
   if (hole.green) {
     const [x, y] = project(hole.green.lat, hole.green.lng);
     svg.appendChild(el("circle", { cx: x, cy: y, r: 14, class: "green-shape" }));
   }
 
-  // 4. Draw Shot Trajectory Line
   if (hole.shots.length > 1) {
     const linePts = hole.shots.map(s => project(s.lat, s.lng).join(",")).join(" ");
     svg.appendChild(el("polyline", { points: linePts, class: "shot-line" }));
   }
 
-  // 5. Draw Shot Circles, Penalty 'X' Badges, and Shot Numbers
   hole.shots.forEach((s, i) => {
     const [x, y] = project(s.lat, s.lng);
     const isTerminal = (s.club === "in" || s.club === "picked up");
 
-    // Skip drawing duplicate shot numbers for terminal holed out marks
     if (isTerminal) return;
 
     const cls = "shot-dot" + (s.penalty ? " penal" : "");
     svg.appendChild(el("circle", { cx: x, cy: y, r: 6, class: cls }));
 
-    // WISHLIST ITEM: OFFSET 'X' PENALTY MARKER TO SHOW LOST BALL
     if (s.penalty > 0) {
       const xMarker = el("text", {
         x: x + 10,
@@ -170,3 +390,7 @@ function renderDebriefPenaltyAnalysis(data) {
     <div class="mishit-line"><span class="label">Net Stroke Cost</span><span>+${currentPenalties} strokes</span></div>
   `;
 }
+
+// EXPORT GLOBALLY FOR APP.JS ROUTING
+window.openDebrief = openDebrief;
+window.renderDebriefHole = renderDebriefHole;
