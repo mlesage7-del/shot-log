@@ -1,7 +1,6 @@
 /*
- * SHOT LOG - JS/NUDGE.JS
- * UPDATE DATE & TIME: 2026-08-12 12:41:00 CDT
- * PRIMARY CHANGES: Spatial geometry, Haversine distance, hazard boundary crossings.
+ * SHOT LOG - NUDGE.JS
+ * UPDATE DATE & TIME: 2026-08-12 14:26:36 CDT
  */
 
 "use strict";
