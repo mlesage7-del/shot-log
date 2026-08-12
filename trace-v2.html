@@ -3,247 +3,395 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Course Tracer / JSON Writer</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<title>Course Tracer v3</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root {
-    --paper: #EDEFEC;
-    --ink: #14170F;
-    --muted: #757B72;
-    --rule: #C9CDC5;
-    --mark: #EE4B0A;
-    --good: #2F6B37;
-    --water: #3A5A8C;
+    --paper:  #EDEFEC;
+    --ink:    #14170F;
+    --muted:  #757B72;
+    --rule:   #C9CDC5;
+    --mark:   #EE4B0A;
+    --water:  #2F5E8C;
+    --green:  #2F6B37;
+
     --mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
+
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 0;
-    font-family: var(--sans);
+    margin: 0; height: 100dvh;
+    display: grid; grid-template-columns: 320px 1fr;
     background: var(--paper); color: var(--ink);
-    display: flex; flex-direction: column; height: 100dvh;
+    font-family: var(--sans);
   }
-  header {
-    background: var(--ink); color: var(--paper);
-    padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center;
+  @media (max-width: 760px) {
+    body { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    #map { min-height: 55dvh; }
   }
-  header h1 { font-size: 1rem; margin: 0; font-weight: 600; letter-spacing: 0.05em; }
-  header a { color: var(--rule); font-size: 0.8125rem; text-decoration: none; }
-  #map { flex: 1; width: 100%; background: #222; }
-  .panel {
-    background: var(--paper); border-top: 2px solid var(--ink);
-    padding: 0.75rem 1rem max(1rem, env(safe-area-inset-bottom));
-    display: flex; flex-direction: column; gap: 0.625rem;
+
+  aside { padding: 1rem; overflow-y: auto; border-right: 1px solid var(--rule); }
+  #map { height: 100%; width: 100%; }
+
+  .header-row { display: flex; justify-content: space-between; align-items: baseline; }
+  h1 { font-size: 1.125rem; margin: 0 0 0.25rem; letter-spacing: -0.01em; }
+  .back-link { font-size: 0.75rem; color: var(--muted); text-decoration: underline; }
+
+  .sub { color: var(--muted); font-size: 0.8125rem; margin: 0 0 1rem; line-height: 1.45; }
+
+  .eyebrow {
+    font: 600 0.6875rem/1 var(--sans);
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); margin: 1.125rem 0 0.5rem;
   }
-  .row { display: flex; gap: 0.5rem; align-items: center; }
-  label { font: 600 0.6875rem/1 var(--sans); text-transform: uppercase; color: var(--muted); letter-spacing: 0.08em; }
-  input, select, button { font-family: var(--sans); }
-  input, select {
-    padding: 0.5rem; border: 1px solid var(--rule); border-radius: 2px;
-    background: #fff; font-size: 0.875rem; color: var(--ink);
+  .eyebrow:first-of-type { margin-top: 0; }
+
+  button, input { font-family: var(--sans); }
+  button { cursor: pointer; }
+  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+  .field-group { margin-bottom: 0.75rem; }
+  .field-group label { display: block; font: 600 0.6875rem/1 var(--sans); text-transform: uppercase; color: var(--muted); letter-spacing: 0.08em; margin-bottom: 0.35rem; }
+  .field-group input {
+    width: 100%; padding: 0.5rem;
+    border: 1px solid var(--rule); border-radius: 2px;
+    font-family: var(--mono); font-size: 0.875rem;
+    background: var(--paper); color: var(--ink);
   }
+
+  .hole-row { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+  .hole-row label { font-size: 0.8125rem; color: var(--muted); }
+  .hole-row input {
+    width: 4rem; padding: 0.5rem;
+    border: 1px solid var(--rule); border-radius: 2px;
+    font-family: var(--mono); font-size: 1rem; text-align: center;
+    background: var(--paper); color: var(--ink);
+  }
+
+  /* Three mode grid: Green, Dogleg, Water */
   .modes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.375rem; }
-  .mode-btn {
-    padding: 0.625rem 0.25rem; border: 1px solid var(--rule);
-    background: #fff; font-size: 0.75rem; font-weight: 600;
-    text-transform: uppercase; color: var(--muted); cursor: pointer; text-align: center;
+  .mode {
+    padding: 0.75rem 0.25rem;
+    border: 1px solid var(--rule); border-radius: 2px;
+    background: transparent; color: var(--ink);
+    font: 600 0.6875rem/1.2 var(--sans);
+    letter-spacing: 0.02em; text-transform: uppercase;
+    text-align: center;
   }
-  .mode-btn.active[data-mode="green"] { background: var(--good); color: #fff; border-color: var(--good); }
-  .mode-btn.active[data-mode="corner"] { background: var(--mark); color: #fff; border-color: var(--mark); }
-  .mode-btn.active[data-mode="hazard"] { background: var(--water); color: #fff; border-color: var(--water); }
-  .action-btn {
-    padding: 0.625rem; border: 1px solid var(--ink); border-radius: 2px;
-    background: var(--ink); color: var(--paper); font-weight: 600; font-size: 0.75rem;
-    text-transform: uppercase; cursor: pointer; flex: 1;
+  .mode[aria-pressed="true"] { color: var(--paper); }
+  #greenMode[aria-pressed="true"] { background: var(--green); border-color: var(--green); }
+  #cornerMode[aria-pressed="true"] { background: var(--mark); border-color: var(--mark); }
+  #waterMode[aria-pressed="true"] { background: var(--water); border-color: var(--water); }
+
+  .hint {
+    margin: 0.75rem 0 0; padding: 0.75rem;
+    border-left: 3px solid var(--mark);
+    background: rgba(238,75,10,0.07);
+    font-size: 0.8125rem; line-height: 1.45;
   }
-  .action-btn.secondary { background: transparent; color: var(--ink); }
-  #jsonOutput {
-    width: 100%; height: 80px; font-family: var(--mono); font-size: 0.7rem;
-    padding: 0.5rem; border: 1px solid var(--rule); background: #fff; resize: none;
+
+  .draw-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.75rem; }
+  .draw-actions button {
+    padding: 0.75rem; border: 1px solid var(--ink); border-radius: 2px;
+    background: var(--ink); color: var(--paper);
+    font: 600 0.75rem/1 var(--sans); letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .draw-actions .ghost { background: transparent; color: var(--muted); border-color: var(--rule); }
+  .draw-actions button:disabled { opacity: 0.3; cursor: default; }
+
+  /* Running list of tracked features */
+  .features { list-style: none; margin: 0; padding: 0; }
+  .features li {
+    display: grid; grid-template-columns: 2.5rem 1fr auto;
+    gap: 0.5rem; align-items: baseline;
+    padding: 0.625rem 0; border-bottom: 1px solid var(--rule);
+    font-family: var(--mono); font-size: 0.8125rem;
+  }
+  .features .hole { font-weight: 600; color: var(--mark); }
+  .features .kind.water { color: var(--water); font-weight: 600; }
+  .features .kind.green { color: var(--green); font-weight: 600; }
+  .features .kind.corner { color: var(--mark); font-weight: 600; }
+  .features .del {
+    background: none; border: none; color: var(--muted);
+    font-size: 1rem; line-height: 1; padding: 0 0 0 0.5rem;
+  }
+  .empty { color: var(--muted); font-size: 0.8125rem; padding: 0.75rem 0; }
+
+  #exportBtn {
+    display: block; width: 100%; margin-top: 1rem; padding: 1rem;
+    border: none; border-radius: 2px;
+    background: var(--mark); color: var(--paper);
+    font: 700 0.875rem/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  #exportBtn:disabled { background: var(--rule); color: var(--muted); }
+
+  .fineprint { color: var(--muted); font-size: 0.75rem; line-height: 1.5; margin-top: 1rem; }
+  .locate {
+    background: none; border: none; padding: 0;
+    color: var(--muted); font-size: 0.75rem; text-decoration: underline; margin-top: 0.5rem;
   }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Course Tracer v2</h1>
-  <a href="index.html">&larr; Back to Shot Log</a>
-</header>
+<aside>
+  <div class="header-row">
+    <h1>Course Tracer v3</h1>
+    <a href="index.html" class="back-link">&larr; Back to App</a>
+  </div>
+  <p class="sub">
+    Trace greens, doglegs, and water hazards. Saved automatically in this browser.
+  </p>
+
+  <div class="field-group">
+    <label for="courseName">Course Name</label>
+    <input type="text" id="courseName" placeholder="Glendale Golf & Country Club">
+  </div>
+
+  <p class="eyebrow">Hole</p>
+  <div class="hole-row">
+    <input type="number" id="holeNum" min="1" max="18" value="1">
+    <label>which hole are you tracing?</label>
+  </div>
+
+  <p class="eyebrow">What are you marking?</p>
+  <div class="modes">
+    <button class="mode" id="greenMode" aria-pressed="false">Green<br><span style="font-weight:400;text-transform:none;letter-spacing:0">1 point</span></button>
+    <button class="mode" id="cornerMode" aria-pressed="false">Dogleg<br><span style="font-weight:400;text-transform:none;letter-spacing:0">target pt</span></button>
+    <button class="mode" id="waterMode" aria-pressed="false">Water<br><span style="font-weight:400;text-transform:none;letter-spacing:0">polygon</span></button>
+  </div>
+
+  <p class="hint" id="hint">Pick a marker type, then click on the map.</p>
+
+  <div class="draw-actions">
+    <button id="finishBtn" disabled>Finish shape</button>
+    <button id="cancelBtn" class="ghost" disabled>Cancel</button>
+  </div>
+
+  <p class="eyebrow">Marked Features</p>
+  <ul class="features" id="features"></ul>
+  <p class="empty" id="featuresEmpty">Nothing marked yet.</p>
+
+  <button id="exportBtn" disabled>Export course.json</button>
+  <button class="locate" id="locateBtn">Jump to my location</button>
+
+  <p class="fineprint">
+    Your phone's GPS is &plusmn;3&ndash;5m. Get the near edge of water and target corners roughly right and move on.
+  </p>
+</aside>
 
 <div id="map"></div>
-
-<div class="panel">
-  <div class="row">
-    <div style="flex:1">
-      <label for="courseName">Course Name</label>
-      <input type="text" id="courseName" value="Glendale Golf & Country Club" style="width:100%">
-    </div>
-    <div style="width: 80px;">
-      <label for="holeSelect">Hole</label>
-      <select id="holeSelect" style="width:100%"></select>
-    </div>
-  </div>
-
-  <div class="modes">
-    <button class="mode-btn active" data-mode="green">Green Pin</button>
-    <button class="mode-btn" data-mode="corner">Dogleg</button>
-    <button class="mode-btn" data-mode="hazard">Water Polygon</button>
-  </div>
-
-  <div class="row">
-    <button class="action-btn secondary" id="clearHoleBtn">Clear Hole</button>
-    <button class="action-btn secondary" id="closeHazardBtn" hidden>Close Water Poly</button>
-    <button class="action-btn" id="exportBtn">Download course.json</button>
-  </div>
-
-  <textarea id="jsonOutput" readonly placeholder="Course JSON generates here..."></textarea>
-</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 "use strict";
 
-let map;
-let currentHole = 1;
-let currentMode = "green"; // green | corner | hazard
-let activePolygonPts = [];
+const STORAGE_KEY = "coursetracer:v3";
+const WINNIPEG = [49.88, -97.30];
 
-let courseData = {
-  id: "glendale",
-  name: "Glendale Golf & Country Club",
-  holes: Array.from({ length: 18 }, (_, i) => ({
-    number: i + 1,
-    green: null,
-    corners: [],
-    hazards: []
-  }))
-};
+let course = load();
+let mode = null;              // "green" | "corner" | "water" | null
+let draftPoints = [];         // vertices of polygon being drawn
+let draftLayer = null;
+const layers = new Map();     // feature id -> leaflet layer
 
-const layerGroup = L.layerGroup();
+const map = L.map("map", { zoomControl: true }).setView(WINNIPEG, 15);
 
-function initMap() {
-  // Default centered near Winnipeg / Glendale
-  map = L.map('map').setView([49.88, -97.30], 16);
-  
-  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-    maxZoom: 19,
-    attribution: 'Esri Satellite'
+L.tileLayer(
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  {
+    maxZoom: 21,
+    maxNativeZoom: 19,
+    attribution: "Imagery &copy; Esri"
+  }
+).addTo(map);
+
+/* ---- storage ---------------------------------------------------- */
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (err) {
+    console.error("Corrupt storage, starting fresh:", err);
+  }
+  return { name: "Glendale Golf & Country Club", tracedAt: null, features: [] };
+}
+
+const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(course));
+
+/* ---- drawing ---------------------------------------------------- */
+
+function setMode(next) {
+  cancelDraft();
+  mode = (mode === next) ? null : next;
+
+  document.getElementById("greenMode").setAttribute("aria-pressed", String(mode === "green"));
+  document.getElementById("cornerMode").setAttribute("aria-pressed", String(mode === "corner"));
+  document.getElementById("waterMode").setAttribute("aria-pressed", String(mode === "water"));
+
+  document.getElementById("hint").textContent =
+    mode === "green" ? "Click once at the middle of the green."
+    : mode === "corner" ? "Click at the target corner of the dogleg."
+    : mode === "water" ? "Click around the pond. Add 3+ points, then tap Finish shape."
+    : "Pick Green, Dogleg, or Water, then click on the map.";
+
+  refreshDraftButtons();
+}
+
+map.on("click", event => {
+  if (!mode) return;
+  const hole = Number(document.getElementById("holeNum").value);
+  if (!hole) return;
+
+  const lat = Number(event.latlng.lat.toFixed(6));
+  const lng = Number(event.latlng.lng.toFixed(6));
+
+  if (mode === "green") {
+    addFeature({ hole, kind: "green", point: [lat, lng] });
+    setMode(null);
+    return;
+  }
+
+  if (mode === "corner") {
+    addFeature({ hole, kind: "corner", point: [lat, lng] });
+    setMode(null);
+    return;
+  }
+
+  // Water polygon vertex accumulation
+  draftPoints.push([lat, lng]);
+  if (draftLayer) draftLayer.remove();
+  draftLayer = L.polygon(draftPoints, {
+    color: "#2F5E8C", weight: 2, dashArray: "4 4", fillOpacity: 0.25
   }).addTo(map);
+  refreshDraftButtons();
+});
 
-  layerGroup.addTo(map);
-  map.on('click', handleMapClick);
+function finishDraft() {
+  if (draftPoints.length < 3) return;
+  const hole = Number(document.getElementById("holeNum").value);
+  addFeature({ hole, kind: "water", polygon: draftPoints.slice() });
+  cancelDraft();
+  setMode(null);
+}
 
-  // Populate hole dropdown
-  const select = document.getElementById("holeSelect");
-  for (let i = 1; i <= 18; i++) {
-    const opt = document.createElement("option");
-    opt.value = i;
-    opt.textContent = i;
-    select.appendChild(opt);
-  }
+function cancelDraft() {
+  draftPoints = [];
+  if (draftLayer) { draftLayer.remove(); draftLayer = null; }
+  refreshDraftButtons();
+}
 
-  select.addEventListener("change", e => {
-    currentHole = Number(e.target.value);
-    activePolygonPts = [];
-    document.getElementById("closeHazardBtn").hidden = true;
-    renderLayers();
-  });
+function refreshDraftButtons() {
+  document.getElementById("finishBtn").disabled = draftPoints.length < 3;
+  document.getElementById("cancelBtn").disabled = draftPoints.length === 0;
+}
 
-  document.querySelectorAll(".mode-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      currentMode = btn.dataset.mode;
-      activePolygonPts = [];
-      document.getElementById("closeHazardBtn").hidden = true;
+/* ---- features ---------------------------------------------------- */
+
+function addFeature(feature) {
+  feature.id = Date.now() + Math.random();
+  course.features.push(feature);
+  save();
+  drawFeature(feature);
+  renderList();
+}
+
+function drawFeature(feature) {
+  let layer;
+  if (feature.kind === "green") {
+    layer = L.circleMarker(feature.point, {
+      radius: 8, color: "#2F6B37", fillColor: "#2F6B37", fillOpacity: 0.85, weight: 2
     });
-  });
-
-  document.getElementById("courseName").addEventListener("input", e => {
-    courseData.name = e.target.value;
-    courseData.id = e.target.value.toLowerCase().replace(/[^a-z0-9]/g, "_");
-    updateOutput();
-  });
-
-  document.getElementById("clearHoleBtn").addEventListener("click", () => {
-    courseData.holes[currentHole - 1] = { number: currentHole, green: null, corners: [], hazards: [] };
-    activePolygonPts = [];
-    document.getElementById("closeHazardBtn").hidden = true;
-    renderLayers();
-    updateOutput();
-  });
-
-  document.getElementById("closeHazardBtn").addEventListener("click", () => {
-    if (activePolygonPts.length >= 3) {
-      courseData.holes[currentHole - 1].hazards.push({
-        type: "water",
-        polygon: activePolygonPts
-      });
-      activePolygonPts = [];
-      document.getElementById("closeHazardBtn").hidden = true;
-      renderLayers();
-      updateOutput();
-    }
-  });
-
-  document.getElementById("exportBtn").addEventListener("click", exportFile);
-
-  updateOutput();
-}
-
-function handleMapClick(e) {
-  const lat = Number(e.latlng.lat.toFixed(6));
-  const lng = Number(e.latlng.lng.toFixed(6));
-  const hole = courseData.holes[currentHole - 1];
-
-  if (currentMode === "green") {
-    hole.green = { lat, lng };
-  } else if (currentMode === "corner") {
-    hole.corners.push({ lat, lng });
-  } else if (currentMode === "hazard") {
-    activePolygonPts.push([lat, lng]);
-    document.getElementById("closeHazardBtn").hidden = activePolygonPts.length < 3;
-  }
-
-  renderLayers();
-  updateOutput();
-}
-
-function renderLayers() {
-  layerGroup.clearLayers();
-  const hole = courseData.holes[currentHole - 1];
-
-  if (hole.green) {
-    L.circleMarker([hole.green.lat, hole.green.lng], {
-      radius: 10, color: '#fff', fillColor: '#2F6B37', fillOpacity: 0.9, weight: 2
-    }).bindTooltip("Green " + currentHole, { permanent: true, direction: 'top' }).addTo(layerGroup);
-  }
-
-  hole.corners.forEach((c, i) => {
-    L.circleMarker([c.lat, c.lng], {
-      radius: 6, color: '#EE4B0A', fillColor: '#EE4B0A', fillOpacity: 0.8
-    }).bindTooltip("Corner " + (i + 1), { permanent: false }).addTo(layerGroup);
-  });
-
-  hole.hazards.forEach(hz => {
-    L.polygon(hz.polygon, { color: '#3A5A8C', fillColor: '#3A5A8C', fillOpacity: 0.5 }).addTo(layerGroup);
-  });
-
-  if (activePolygonPts.length) {
-    L.polyline(activePolygonPts, { color: '#3A5A8C', dashArray: '4,4' }).addTo(layerGroup);
-    activePolygonPts.forEach(p => {
-      L.circleMarker(p, { radius: 4, color: '#3A5A8C', fillColor: '#fff', fillOpacity: 1 }).addTo(layerGroup);
+    layer.bindTooltip("Hole " + feature.hole + " \u00B7 Green", { direction: "top" });
+  } else if (feature.kind === "corner") {
+    layer = L.circleMarker(feature.point, {
+      radius: 6, color: "#EE4B0A", fillColor: "#EE4B0A", fillOpacity: 0.9, weight: 2
     });
+    layer.bindTooltip("Hole " + feature.hole + " \u00B7 Dogleg", { direction: "top" });
+  } else {
+    layer = L.polygon(feature.polygon, {
+      color: "#2F5E8C", weight: 2, fillOpacity: 0.35
+    });
+    layer.bindTooltip("Hole " + feature.hole + " \u00B7 Water", { direction: "top" });
   }
+
+  layer.addTo(map);
+  layers.set(feature.id, layer);
 }
 
-function updateOutput() {
-  document.getElementById("jsonOutput").value = JSON.stringify(courseData, null, 2);
+function deleteFeature(id) {
+  const layer = layers.get(id);
+  if (layer) { layer.remove(); layers.delete(id); }
+  course.features = course.features.filter(f => f.id !== id);
+  save();
+  renderList();
 }
 
-function exportFile() {
-  const blob = new Blob([JSON.stringify(courseData, null, 2)], { type: "application/json" });
+function renderList() {
+  const list = document.getElementById("features");
+  list.innerHTML = "";
+  document.getElementById("featuresEmpty").hidden = course.features.length > 0;
+  document.getElementById("exportBtn").disabled = course.features.length === 0;
+
+  [...course.features]
+    .sort((a, b) => a.hole - b.hole || a.kind.localeCompare(b.kind))
+    .forEach(f => {
+      const li = document.createElement("li");
+
+      const hole = document.createElement("span");
+      hole.className = "hole";
+      hole.textContent = "#" + f.hole;
+
+      const kind = document.createElement("span");
+      kind.className = "kind " + f.kind;
+      kind.textContent = f.kind === "green" ? "green"
+        : f.kind === "corner" ? "dogleg"
+        : "water (" + f.polygon.length + " pts)";
+
+      const del = document.createElement("button");
+      del.className = "del";
+      del.type = "button";
+      del.textContent = "\u00D7";
+      del.setAttribute("aria-label", "Delete");
+      del.addEventListener("click", () => deleteFeature(f.id));
+
+      li.append(hole, kind, del);
+      list.append(li);
+    });
+}
+
+/* ---- export ------------------------------------------------------ */
+
+function exportCourse() {
+  const cName = document.getElementById("courseName").value || "Glendale Golf & Country Club";
+  const courseId = cName.toLowerCase().replace(/[^a-z0-9]/g, "_");
+
+  const byHole = new Map();
+  for (const f of course.features) {
+    if (!byHole.has(f.hole)) byHole.set(f.hole, { number: f.hole, green: null, corners: [], hazards: [] });
+    const hole = byHole.get(f.hole);
+    if (f.kind === "green") hole.green = { lat: f.point[0], lng: f.point[1] };
+    else if (f.kind === "corner") hole.corners.push({ lat: f.point[0], lng: f.point[1] });
+    else hole.hazards.push({ type: "water", polygon: f.polygon });
+  }
+
+  const holes = [...byHole.values()].sort((a, b) => a.number - b.number);
+
+  const payload = {
+    id: courseId,
+    name: cName,
+    tracedAt: new Date().toISOString(),
+    coordinateOrder: "[lat, lng]",
+    holes
+  };
+
+  course.name = cName;
+  save();
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -252,7 +400,39 @@ function exportFile() {
   URL.revokeObjectURL(url);
 }
 
-window.onload = initMap;
+/* ---- init ---- */
+
+document.getElementById("courseName").value = course.name || "Glendale Golf & Country Club";
+document.getElementById("courseName").addEventListener("input", e => {
+  course.name = e.target.value;
+  save();
+});
+
+document.getElementById("greenMode").addEventListener("click", () => setMode("green"));
+document.getElementById("cornerMode").addEventListener("click", () => setMode("corner"));
+document.getElementById("waterMode").addEventListener("click", () => setMode("water"));
+document.getElementById("finishBtn").addEventListener("click", finishDraft);
+document.getElementById("cancelBtn").addEventListener("click", cancelDraft);
+document.getElementById("exportBtn").addEventListener("click", exportCourse);
+
+document.getElementById("locateBtn").addEventListener("click", () => {
+  navigator.geolocation.getCurrentPosition(
+    p => map.setView([p.coords.latitude, p.coords.longitude], 17),
+    () => alert("Couldn't get a GPS fix. Pan map manually.")
+  );
+});
+
+document.addEventListener("keydown", event => {
+  if (event.key === "Enter" && draftPoints.length >= 3) finishDraft();
+  if (event.key === "Escape") { cancelDraft(); setMode(null); }
+});
+
+course.features.forEach(drawFeature);
+renderList();
+if (course.features.length) {
+  const first = course.features[0];
+  map.setView(first.kind === "water" ? first.polygon[0] : first.point, 17);
+}
 </script>
 </body>
 </html>
