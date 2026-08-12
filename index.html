@@ -42,6 +42,7 @@
   [hidden] { display: none !important; }
   hr { border: none; border-top: 1px solid var(--rule); margin: 2rem 0 1.5rem; }
 
+  /* ---- round header ------------------------------------------ */
   .round-bar {
     display: flex; justify-content: space-between; align-items: center;
     border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule);
@@ -61,6 +62,7 @@
     color: var(--muted); font-size: 0.75rem; text-decoration: underline;
   }
 
+  /* ---- hole strip --------------------------------------------- */
   .hole-strip {
     display: flex; align-items: baseline; gap: 0.625rem;
     width: 100%; padding: 0.5rem 0 0.875rem;
@@ -76,6 +78,7 @@
   }
   .hole-strip .tap { margin-left: auto; font-size: 0.6875rem; color: var(--muted); text-decoration: underline; }
 
+  /* ---- the nudge ---------------------------------------------- */
   .nudge {
     border: 2px solid var(--rule); border-radius: 2px;
     padding: 0.875rem 1rem; margin-bottom: 1.25rem;
@@ -96,6 +99,7 @@
   }
   .nudge .quiet { color: var(--muted); font-family: var(--mono); font-size: 0.8125rem; margin: 0; }
 
+  /* ---- last-shot readout -------------------------------------- */
   .readout {
     border: 1px solid var(--rule); padding: 0.75rem 1rem;
     margin-bottom: 1rem; min-height: 4.5rem;
@@ -115,6 +119,7 @@
   .readout-value .floor { font-size: 1.375rem; opacity: 0.7; margin-right: 0.2rem; }
   .readout-idle { font-family: var(--mono); font-size: 0.875rem; color: var(--muted); margin: 0.25rem 0 0; }
 
+  /* ---- fix strip ---------------------------------------------- */
   .fix-strip {
     display: flex; align-items: center; gap: 0.5rem;
     font-family: var(--mono); font-size: 0.75rem; color: var(--muted);
@@ -124,6 +129,7 @@
   .dot.is-good { background: var(--good); }
   .dot.is-poor { background: var(--poor); }
 
+  /* ---- club grid ---------------------------------------------- */
   .clubs {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
     gap: 0.5rem; margin-bottom: 1rem;
@@ -138,6 +144,7 @@
   .club:disabled { opacity: 0.35; }
   .club.is-last { border: 2px solid var(--ink); }
 
+  /* ---- penalty & mishits --------------------------------------- */
   #penaltyBtn {
     display: block; width: 100%; padding: 1rem;
     border: 1px solid var(--rule); border-radius: 2px;
@@ -160,6 +167,7 @@
   .mishit:disabled { opacity: 0.3; }
   .mishit[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--paper); }
 
+  /* ---- end-of-hole + undo -------------------------------------- */
   .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem; }
   .actions button {
     padding: 0.875rem 0.5rem;
@@ -173,6 +181,7 @@
   #undoBtn:not(:disabled) { color: var(--poor); border-color: var(--poor); }
   .actions.solo { grid-template-columns: 1fr; margin-bottom: 1.75rem; }
 
+  /* ---- shot log ------------------------------------------------ */
   .log { list-style: none; margin: 0; padding: 0; }
   .log li {
     display: grid; grid-template-columns: 2rem 3.5rem 1fr auto;
@@ -192,6 +201,7 @@
 
   .empty { color: var(--muted); font-size: 0.875rem; padding: 1rem 0; }
 
+  /* ---- start screen ------------------------------------------- */
   .start h1 { font-size: 1.5rem; letter-spacing: -0.02em; margin: 0.25rem 0 0.5rem; }
   .start > p { color: var(--muted); font-size: 0.9375rem; margin: 0 0 1.25rem; }
 
@@ -228,6 +238,7 @@
   }
   .link-row:active { background: rgba(0,0,0,0.04); }
 
+  /* ---- rounds + data ------------------------------------------- */
   .rounds { list-style: none; margin: 0 0 1.5rem; padding: 0; }
   .rounds li {
     display: grid; grid-template-columns: 1fr auto auto;
@@ -272,6 +283,7 @@
   .putt-btn:active { background: var(--ink); color: var(--paper); }
   .putt-btn:disabled { opacity: 0.35; }
 
+  /* ---- stats & debrief screens ---------------------------------- */
   .data-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.8125rem; }
   .data-table th, .data-table td { text-align: right; padding: 0.4rem 0.3rem; border-bottom: 1px solid var(--rule); }
   .data-table th:first-child, .data-table td:first-child { text-align: left; }
@@ -330,6 +342,7 @@
   .nudge-event .tag.solid { color: var(--good); }
   .nudge-event .tag.cautious { color: var(--penalty); }
 
+  /* ---- manual / sim entry ------------------------------------- */
   .manual-entry {
     display: grid; grid-template-columns: 1fr 1fr auto;
     gap: 0.75rem; align-items: end; margin-bottom: 1rem;
@@ -385,7 +398,7 @@
 
   <button class="start-choice" data-source="real" data-mode="gps">
     <strong>Real course</strong>
-    <span>GPS tracks every shot. Pure live nudge on your phone.</span>
+    <span>GPS tracks every shot. Wind, weather, actual lies.</span>
   </button>
   <button class="start-choice" data-source="sim" data-mode="manual">
     <strong>Simulator</strong>
@@ -415,7 +428,7 @@
 
   <p class="fineprint" id="refStatus">Loading status&hellip;</p>
   <p class="fineprint">
-    All calculations run directly in your phone browser.
+    Rounds live in browser storage. Calculations run locally on-device.
   </p>
 </section>
 
@@ -423,7 +436,7 @@
 <section id="manualScreen" hidden>
   <div class="round-bar">
     <span class="round-bar-left">
-      <span class="tag is-sim">SIMULATOR</span>
+      <span class="tag is-sim" id="manualTag">SIMULATOR</span>
       <span class="strokes" id="manualCount">0 shots</span>
     </span>
     <button class="link-btn" id="manualEndBtn">End session</button>
@@ -480,6 +493,9 @@
     <button class="link-btn" id="debriefBack">&larr; Back</button>
   </div>
   <h1 id="debriefTitle">Round debrief</h1>
+  <p class="fineprint" id="debriefCaveat">
+    Club comparison and nudge grading use current player estimates.
+  </p>
 
   <div class="debrief-stats" id="debriefStats"></div>
 
@@ -570,15 +586,14 @@
 
   <p class="eyebrow">This round</p>
   <ul class="log" id="log"></ul>
-  <p class="empty" id="empty">No shots yet.</p>
+  <p class="empty" id="empty">No shots yet. Stand at your ball and tap your club.</p>
 </section>
 
 <script>
 "use strict";
 
 /* ============================================================
-   IN-BROWSER STATISTICAL DISTANCE ENGINE
-   EM fitting algorithm ported from distance_engine.py
+   IN-BROWSER DISTANCE ENGINE (EM ALGORITHM PORTED FROM PYTHON)
    ============================================================ */
 
 const Z75 = 0.6745;
@@ -733,7 +748,7 @@ function calculateClubTable(playerId) {
 }
 
 /* ============================================================
-   APP STORAGE & SCHEMA MANAGEMENT v6
+   APP CONSTANTS & STATE
    ============================================================ */
 
 const STORAGE_KEY = "shotlog:v1";
@@ -760,7 +775,8 @@ let currentFix = null;
 let currentFixAt = 0;
 let currentScreen = null;
 let debriefState = null;
-let activePlayerId = "matt";
+let redoStack = [];
+let manualClub = null;
 
 const DEFAULT_PRIORS_MATT = {
   Dr: [202, 24], '3w': [195, 23], '5h': [180, 18], '3i': [170, 17],
@@ -799,26 +815,25 @@ function migrate(data) {
     round.courseId = round.courseId || "glendale";
     round.startHole = round.startHole || 1;
     round.mode = round.mode || "gps";
+    round.shots.forEach(shot => {
+      shot.penaltyStrokes = shot.penaltyStrokes || 0;
+    });
   });
   return data;
 }
 
 function load() {
   const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    return migrate({ schemaVersion: SCHEMA_VERSION, players: {}, rounds: [] });
-  }
+  if (!raw) return migrate({ schemaVersion: SCHEMA_VERSION, players: {}, rounds: [] });
   try { return migrate(JSON.parse(raw)); }
-  catch (err) {
-    return migrate({ schemaVersion: SCHEMA_VERSION, players: {}, rounds: [] });
-  }
+  catch (err) { return migrate({ schemaVersion: SCHEMA_VERSION, players: {}, rounds: [] }); }
 }
 
 const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
 const activeRound = () => db.rounds.find(r => !r.endedAt) || null;
 const lastShot = round => round.shots[round.shots.length - 1] ?? null;
 
-/* ---- geometry --------------------------------------------------- */
+/* ---- GEOMETRY ---------------------------------------------------- */
 
 function haversineYards(a, b) {
   const toRad = d => d * Math.PI / 180;
@@ -860,7 +875,7 @@ const yardsBetween = (a, b, toXY) => {
   return Math.hypot(bx - ax, by - ay) * M_TO_YARDS;
 };
 
-/* ---- nudge engine ------------------------------------------------ */
+/* ---- NUDGE ENGINE ------------------------------------------------ */
 
 function chooseTarget(ball, hole, toXY) {
   const green = [hole.green.lat, hole.green.lng];
@@ -937,11 +952,19 @@ function computeNudge(ball, hole, clubTable) {
   };
 }
 
-/* ---- hole tracking ---------------------------------------------- */
+/* ---- HOLE TRACKING ----------------------------------------------- */
 
 const wrapHole = n => ((n - 1) % HOLES_PER_ROUND + HOLES_PER_ROUND) % HOLES_PER_ROUND + 1;
 const holesEnded = round => round.shots.filter(s => s.holeEnd).length;
 const currentHole = round => wrapHole(round.startHole + holesEnded(round));
+
+function setHole(target) {
+  const round = activeRound();
+  if (!round) return;
+  round.startHole = wrapHole(target - holesEnded(round));
+  save();
+  render();
+}
 
 function currentGreenPosition() {
   const round = activeRound();
@@ -962,6 +985,15 @@ function capture(club, holeEnd) {
   if (!usingGreen && !currentFix) return;
 
   const acc = usingGreen ? 0 : currentFix.accuracy;
+  const fixAgeSec = usingGreen ? 0 : (Date.now() - currentFixAt) / 1000;
+
+  if (!usingGreen && fixAgeSec > 5 && !holeEnd) {
+    if (!confirm("Your GPS fix is " + Math.round(fixAgeSec) + "s old. Log anyway?")) return;
+  }
+
+  if (!usingGreen && acc > 15 && !holeEnd) {
+    if (!confirm("Weak GPS right now (\u00B1" + Math.round(acc) + " m). Log anyway?")) return;
+  }
 
   const prev = lastShot(round);
   const shot = {
@@ -977,9 +1009,15 @@ function capture(club, holeEnd) {
   if (holeEnd) shot.holeEnd = holeEnd;
 
   round.shots.push(shot);
+  redoStack = [];
   save();
 
   if (navigator.vibrate) navigator.vibrate(25);
+
+  if (prev && prev.club !== null) showResult(prev, distanceFor(prev, shot));
+  else if (holeEnd) showIdle(holeEnd === "holed" ? "Holed out." : "Picked up.");
+  else showIdle("Tracking " + club + "\u2026");
+
   render();
 }
 
@@ -987,8 +1025,16 @@ function cyclePenalty() {
   const round = activeRound();
   const shot = round && lastShot(round);
   if (!shot || shot.club === null) return;
+
   shot.penaltyStrokes = (shot.penaltyStrokes + 1) % 3;
   save();
+  if (navigator.vibrate) navigator.vibrate(shot.penaltyStrokes ? [20, 40, 20] : 15);
+
+  showIdle(
+    shot.penaltyStrokes === 0 ? "Cleared. " + shot.club + " back in play."
+    : shot.penaltyStrokes === 1 ? shot.club + " +1 penalty."
+    : shot.club + " +2 penalty."
+  );
   render();
 }
 
@@ -996,16 +1042,30 @@ function toggleMishit(kind) {
   const round = activeRound();
   const shot = round && lastShot(round);
   if (!shot || shot.club === null) return;
+
   shot.mishit = (shot.mishit === kind) ? null : kind;
   save();
+  if (navigator.vibrate) navigator.vibrate(shot.mishit ? 20 : 15);
   render();
 }
 
 function undo() {
   const round = activeRound();
   if (!round || !round.shots.length) return;
-  round.shots.pop();
+  const dropped = round.shots.pop();
+  redoStack.push(dropped);
   save();
+  showIdle("Removed " + (dropped.club ?? dropped.holeEnd ?? "mark") + ".");
+  render();
+}
+
+function redo() {
+  const round = activeRound();
+  if (!round || !redoStack.length) return;
+  const restored = redoStack.pop();
+  round.shots.push(restored);
+  save();
+  showIdle("Restored " + (restored.club ?? restored.holeEnd ?? "mark") + ".");
   render();
 }
 
@@ -1019,7 +1079,7 @@ function distanceFor(shot, next) {
   return { kind: "floor", yards };
 }
 
-/* ---- round lifecycle --------------------------------------------- */
+/* ---- ROUND LIFECYCLE --------------------------------------------- */
 
 function startRound(source, mode) {
   const startHole = wrapHole(Number(document.getElementById("startHole").value) || 1);
@@ -1038,6 +1098,7 @@ function startRound(source, mode) {
     shots: []
   });
   save();
+  if (mode === "gps") showIdle("Tap the club in your hand.");
   render();
 }
 
@@ -1057,14 +1118,11 @@ function deleteRound(id) {
   render();
 }
 
-/* ---- import / export --------------------------------------------- */
+/* ---- EXPORT / IMPORT --------------------------------------------- */
 
 function exportJson() {
   const stamp = new Date().toISOString().slice(0, 10);
-  const payload = {
-    ...db,
-    courses
-  };
+  const payload = { ...db, courses };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -1119,24 +1177,64 @@ function toast(text, bad = false) {
   setTimeout(() => { el.hidden = true; }, 4000);
 }
 
-/* ---- geolocation -------------------------------------------------- */
+/* ---- GEOLOCATION -------------------------------------------------- */
 
 navigator.geolocation.watchPosition(
   pos => {
     currentFix = pos.coords;
     currentFixAt = Date.now();
-    document.getElementById("acc").textContent = "\u00B1" + Math.round(currentFix.accuracy) + " m";
-    document.getElementById("dot").className = "dot " + (currentFix.accuracy <= 10 ? "is-good" : "is-poor");
+    const m = Math.round(currentFix.accuracy);
+    document.getElementById("acc").textContent = "\u00B1" + m + " m";
+    document.getElementById("dot").className = "dot " + (m <= 10 ? "is-good" : m <= 20 ? "" : "is-poor");
+    refreshControls();
     renderNudge();
   },
   err => {
-    document.getElementById("acc").textContent = "No GPS fix";
+    document.getElementById("acc").textContent = "No GPS fix — " + err.message;
     document.getElementById("dot").className = "dot is-poor";
+    refreshControls();
   },
   { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 }
 );
 
-/* ---- nudge rendering --------------------------------------------- */
+/* ---- READOUT ------------------------------------------------------ */
+
+function showResult(shot, dist) {
+  const box = document.getElementById("readout");
+  const label = document.getElementById("readoutLabel");
+  const value = document.getElementById("readoutValue");
+  const idle = document.getElementById("readoutIdle");
+
+  box.className = "readout";
+  clearTimeout(showResult.timer);
+
+  if (dist.kind === "unknown") {
+    label.textContent = shot.club + " — replayed";
+    value.hidden = true;
+    idle.hidden = false;
+    idle.textContent = "Stroke counted. No distance.";
+    box.classList.add("is-penal");
+  } else {
+    label.textContent = shot.club + (dist.kind === "floor" ? " — penalty" : "");
+    idle.hidden = true;
+    value.hidden = false;
+    value.innerHTML = (dist.kind === "floor" ? '<span class="floor">\u2265</span>' : "")
+      + Math.round(dist.yards) + "<small>yards</small>";
+    box.classList.add(dist.kind === "floor" ? "is-penal" : "is-fresh");
+  }
+  showResult.timer = setTimeout(() => { box.className = "readout"; }, 2800);
+}
+
+function showIdle(text) {
+  document.getElementById("readoutLabel").textContent = "Last shot";
+  document.getElementById("readoutValue").hidden = true;
+  const idle = document.getElementById("readoutIdle");
+  idle.hidden = false;
+  idle.textContent = text;
+  document.getElementById("readout").className = "readout";
+}
+
+/* ---- NUDGE RENDERING --------------------------------------------- */
 
 function renderNudge() {
   const panel = document.getElementById("nudge");
@@ -1151,7 +1249,7 @@ function renderNudge() {
   quiet.hidden = false;
 
   if (!round) return;
-  if (!currentFix) { quiet.textContent = "Waiting for satellite fix\u2026"; return; }
+  if (!currentFix) { quiet.textContent = "Waiting for a fix\u2026"; return; }
 
   const course = courses[round.courseId];
   if (!course) { quiet.textContent = "Selected course layout missing."; return; }
@@ -1160,34 +1258,538 @@ function renderNudge() {
   const hole = course.holes.find(h => h.number === currentHole(round));
   const n = computeNudge([currentFix.latitude, currentFix.longitude], hole, clubTable);
 
+  const yds = x => Math.round(x) + " yds";
+
   if (n.kind === "no_data")  { quiet.textContent = "Hole " + currentHole(round) + " isn't traced."; return; }
-  if (n.kind === "in_water") { quiet.textContent = "Ball in water boundary. Drop and play on."; return; }
+  if (n.kind === "in_water") { quiet.textContent = "Your ball appears to be in the water. Take your drop."; return; }
+  if (n.kind === "out_of_range") {
+    quiet.textContent = "Water starts at " + Math.round(n.near) + " yds \u2014 out of range even on best day. Hit away.";
+    return;
+  }
   if (n.kind === "clear") {
-    quiet.textContent = Math.round(n.toGreen) + " yds to green. Line clear.";
+    quiet.textContent = n.dogleg
+      ? "Dogleg \u2014 play to corner, " + yds(n.toTarget) + ". No water on line."
+      : yds(n.toGreen) + " to green. No water on line.";
     return;
   }
 
   quiet.hidden = true;
   verdict.hidden = false;
 
+  const lines = [];
+  if (n.dogleg) lines.push(`Dogleg. Target corner: ${Math.round(n.toTarget)} (${Math.round(n.toGreen)} to green).`);
+  const span = n.merged[0];
+  lines.push(`Water ${Math.round(span[0])}\u2013${Math.round(span[1])} yds out. Carry ${Math.round(n.carryNeeded)} to clear.`);
+
   if (n.kind === "go") {
     panel.className = "nudge is-go";
     verdict.textContent = "Go";
     const [name, c] = n.club;
-    detail.innerHTML = `<p class="detail">${name} carries ${Math.round(c.carrySafe)} yds. Water needs ${Math.round(n.carryNeeded)}.</p>`;
+    lines.push(`${name} carries ${Math.round(c.carrySafe)} yds on a poor strike.`);
+    if (n.windowEnd < Infinity) {
+      lines.push(`Flushed it goes ${Math.round(c.long)} — short of next water.`);
+    }
   } else {
     panel.className = "nudge is-layup";
     verdict.textContent = "Lay up";
+    if (n.reckless) {
+      const [name, c] = n.reckless;
+      lines.push(`${name} clears first water, but flushed goes ${Math.round(c.long)} — into water beyond.`);
+    } else {
+      const [name, c] = n.best;
+      lines.push(`Longest safe carry is ${name} at ${Math.round(c.carrySafe)}. You don't have this shot.`);
+    }
     if (n.layup) {
       const [name, c] = n.layup;
-      detail.innerHTML = `<p class="detail">Lay up with ${name}. Stops at ${Math.round(c.long)} yds.</p>`;
+      lines.push(`Lay up: ${name}. Even flushed stops at ${Math.round(c.long)}.`);
+      lines.push(`Leaves ${Math.round(n.toTarget - c.typical)} to the ${n.dogleg ? "corner" : "green"}.`);
     } else {
-      detail.innerHTML = `<p class="detail">No safe layup club. Aim around the hazard.</p>`;
+      lines.push("Nothing lays up cleanly. Aim away from water.");
     }
+  }
+
+  for (const line of lines) {
+    const p = document.createElement("p");
+    p.className = "detail";
+    p.textContent = line;
+    detail.append(p);
   }
 }
 
-/* ---- ui & screen switching --------------------------------------- */
+/* ---- MANUAL / SIM ENTRY ----------------------------------------- */
+
+function addManualShot() {
+  const round = activeRound();
+  if (!round || round.mode !== "manual" || !manualClub) return;
+
+  const carry = Number(document.getElementById("carryInput").value);
+  const total = Number(document.getElementById("totalInput").value);
+  if (!carry) return;
+
+  round.shots.push({
+    club: manualClub,
+    carry,
+    total: total || carry,
+    at: new Date().toISOString()
+  });
+  save();
+
+  if (navigator.vibrate) navigator.vibrate(20);
+
+  document.getElementById("carryInput").value = "";
+  document.getElementById("totalInput").value = "";
+  document.getElementById("carryInput").focus();
+  render();
+}
+
+function undoManual() {
+  const round = activeRound();
+  if (!round || !round.shots.length) return;
+  round.shots.pop();
+  save();
+  render();
+}
+
+function selectManualClub(name) {
+  manualClub = (manualClub === name) ? null : name;
+  document.querySelectorAll("#manualClubs .club").forEach(b =>
+    b.classList.toggle("is-last", b.textContent === manualClub)
+  );
+  refreshManual();
+}
+
+function refreshManual() {
+  const round = activeRound();
+  const carry = Number(document.getElementById("carryInput").value);
+  document.getElementById("manualAddBtn").disabled = !(manualClub && carry);
+  document.getElementById("manualUndoBtn").disabled = !(round && round.shots.length);
+  document.getElementById("manualHint").textContent = !manualClub
+    ? "Pick a club, then type what the screen shows."
+    : !carry
+    ? "Type carry for " + manualClub + "."
+    : "Add shot, or keep typing.";
+}
+
+/* ---- DEBRIEF SCREEN LOGIC ---------------------------------------- */
+
+function showOverlay(name) {
+  currentScreen = name;
+  document.getElementById("startScreen").hidden = true;
+  document.getElementById("roundScreen").hidden = true;
+  document.getElementById("manualScreen").hidden = true;
+  document.getElementById("statsScreen").hidden = name !== "stats";
+  document.getElementById("debriefScreen").hidden = name !== "debrief";
+}
+
+function closeOverlay() {
+  currentScreen = null;
+  debriefState = null;
+  document.getElementById("statsScreen").hidden = true;
+  document.getElementById("debriefScreen").hidden = true;
+  render();
+}
+
+function reconstructRoundHoles(round) {
+  let holeNum = round.startHole || 1;
+  const holes = [];
+  let cur = [];
+  for (const shot of round.shots) {
+    cur.push(shot);
+    if (shot.holeEnd) {
+      holes.push({ number: holeNum, shots: cur });
+      cur = [];
+      holeNum++;
+    }
+  }
+  if (cur.length) holes.push({ number: holeNum, shots: cur });
+  return holes;
+}
+
+function gradeShot(club, clubEntry, nudgeResult) {
+  if (nudgeResult.kind !== "go" && nudgeResult.kind !== "layup") return null;
+
+  const recommendsGo = nudgeResult.kind === "go";
+  const carry = clubEntry.carrySafe;
+  const totalLong = clubEntry.long;
+  const wentForIt = carry >= nudgeResult.carryNeeded;
+
+  if (recommendsGo && wentForIt) {
+    return { verdict: "SOLID GO", reason: `${club} carries water (${carry.toFixed(0)} vs ${nudgeResult.carryNeeded.toFixed(0)} needed).` };
+  }
+  if (recommendsGo && !wentForIt) {
+    return { verdict: "CAUTIOUS", reason: `Nudge said go; ${club} played safe (${carry.toFixed(0)} vs ${nudgeResult.carryNeeded.toFixed(0)}).` };
+  }
+  if (!recommendsGo && wentForIt) {
+    return { verdict: "BLUNDER", reason: `Nudge said lay up; ${club} went for carry (${carry.toFixed(0)} vs ${nudgeResult.carryNeeded.toFixed(0)}).` };
+  }
+  if (totalLong > nudgeResult.layupLimit) {
+    return { verdict: "BLUNDER", reason: `${club} total rollout (${totalLong.toFixed(0)}) risks reaching hazard at ${(nudgeResult.layupLimit + 10).toFixed(0)}.` };
+  }
+  return { verdict: "SOLID LAYUP", reason: `${club} stays short of hazard, as advised.` };
+}
+
+function buildDebriefData(round) {
+  const course = courses[round.courseId];
+  const clubTable = calculateClubTable(round.playerId || "matt");
+  const holeGroups = reconstructRoundHoles(round);
+  const holesOut = [];
+  const events = [];
+  const todayShots = {};
+  const todayMishits = {};
+  const todaySwings = {};
+  let totalPutts = 0;
+  const perHolePutts = [];
+
+  for (const { number, shots } of holeGroups) {
+    const holeDef = course ? course.holes.find(h => h.number === number) : null;
+    const pts = [];
+    let putts = 0;
+
+    shots.forEach((shot, i) => {
+      const clubDisp = displayClub(shot.club) ?? (shot.holeEnd === "picked_up" ? "picked up" : "in");
+      if (shot.club === "Putt") putts++;
+
+      const next = shots[i + 1];
+      let dist = null;
+      if (next && shot.club !== null && shot.club !== "Putt") {
+        const yards = haversineYards(shot, next);
+        if (!shot.penaltyStrokes) dist = Math.round(yards);
+        else if (yards >= REPLAY_THRESHOLD_YARDS) dist = "\u2265" + Math.round(yards);
+      }
+      pts.push({ lat: shot.lat, lng: shot.lng, club: clubDisp, dist, penalty: shot.penaltyStrokes || 0, mishit: shot.mishit || null });
+
+      if (shot.club && !shot.lowConfidence) {
+        todaySwings[clubDisp] = (todaySwings[clubDisp] || 0) + 1;
+        if (shot.mishit) {
+          todayMishits[clubDisp] = todayMishits[clubDisp] || {};
+          todayMishits[clubDisp][shot.mishit] = (todayMishits[clubDisp][shot.mishit] || 0) + 1;
+        } else if (!shot.penaltyStrokes && next && shot.club !== "Putt") {
+          const yards = haversineYards(shot, next);
+          todayShots[clubDisp] = todayShots[clubDisp] || [];
+          todayShots[clubDisp].push(yards);
+        }
+      }
+
+      const prevPenalty = i > 0 ? (shots[i - 1].penaltyStrokes || 0) : 0;
+      if (shot.club && shot.club !== "Putt" && shot.club !== "?" && clubTable.clubs[clubDisp] && !prevPenalty && holeDef) {
+        const nudgeResult = computeNudge([shot.lat, shot.lng], holeDef, clubTable);
+        const g = gradeShot(clubDisp, clubTable.clubs[clubDisp], nudgeResult);
+        if (g) events.push({ hole: number, verdict: g.verdict, reason: g.reason, penalty: shot.penaltyStrokes || 0 });
+      }
+    });
+
+    totalPutts += putts;
+    perHolePutts.push({ hole: number, putts });
+    holesOut.push({
+      number,
+      green: holeDef ? holeDef.green : null,
+      hazards: holeDef ? holeDef.hazards : [],
+      corners: holeDef ? holeDef.corners : null,
+      shots: pts,
+    });
+  }
+
+  const sumVals = obj => Object.values(obj).reduce((a, b) => a + b, 0);
+
+  const clubRows = Object.keys(todayShots).sort().map(club => {
+    const vals = todayShots[club];
+    const todayAvg = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const standing = clubTable.clubs[club] ? clubTable.clubs[club].typical : null;
+    const bad = todayMishits[club] ? sumVals(todayMishits[club]) : 0;
+    const swings = todaySwings[club] || (vals.length + bad);
+    return {
+      club, n: vals.length,
+      todayAvg: Math.round(todayAvg * 10) / 10,
+      standing: standing != null ? Math.round(standing * 10) / 10 : null,
+      diff: standing != null ? Math.round((todayAvg - standing) * 10) / 10 : null,
+      mishitBad: bad, mishitSwings: swings,
+    };
+  });
+
+  const mishitRows = Object.entries(todayMishits).map(([club, kinds]) => {
+    const bad = Object.values(kinds).reduce((a, b) => a + b, 0);
+    return { club, swings: todaySwings[club] || bad, bad, breakdown: kinds };
+  });
+
+  const verdictCounts = {};
+  events.forEach(e => { verdictCounts[e.verdict] = (verdictCounts[e.verdict] || 0) + 1; });
+
+  return {
+    round, holes: holesOut, clubRows, mishitRows,
+    putts: { total: totalPutts, perHole: perHolePutts },
+    nudge: { events, counts: verdictCounts },
+  };
+}
+
+function openDebrief(roundId) {
+  const round = db.rounds.find(r => r.id === roundId);
+  if (!round) return;
+
+  const data = buildDebriefData(round);
+  debriefState = { data, holeIndex: 0 };
+  showOverlay("debrief");
+
+  const course = courses[round.courseId];
+  document.getElementById("debriefTitle").textContent =
+    (course ? course.name : "Round") + " \u2014 " + new Date(round.startedAt).toLocaleDateString();
+
+  renderDebriefSummary(data);
+  renderDebriefHole();
+}
+
+function renderDebriefSummary(data) {
+  const swings = swingCount(data.round);
+  const strokes = strokeCount(data.round);
+  const sumVals = obj => Object.values(obj).reduce((a, b) => a + b, 0);
+  const total = sumVals(data.nudge.counts);
+  const solid = (data.nudge.counts["SOLID GO"] || 0) + (data.nudge.counts["SOLID LAYUP"] || 0);
+  const acc = total ? Math.round(100 * solid / total) : null;
+
+  document.getElementById("debriefStats").innerHTML = `
+    <div><span class="n">${swings}</span><span class="l">swings</span></div>
+    <div><span class="n">${strokes}</span><span class="l">strokes</span></div>
+    <div><span class="n">${data.putts.total}</span><span class="l">putts</span></div>
+    <div><span class="n">${acc != null ? acc + "%" : "\u2014"}</span><span class="l">decisions</span></div>
+  `;
+
+  const tbody = document.querySelector("#debriefClubTable tbody");
+  tbody.innerHTML = "";
+  data.clubRows.forEach(row => {
+    const diffTxt = row.diff == null ? "\u2014" : (row.diff >= 0 ? "+" : "") + row.diff;
+    const diffClass = row.diff > 0 ? "pos" : row.diff < 0 ? "neg" : "";
+    const mishitTxt = row.mishitSwings
+      ? Math.round(100 * row.mishitBad / row.mishitSwings) + "% (" + row.mishitBad + "/" + row.mishitSwings + ")"
+      : "\u2014";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${row.club}</td><td>${row.n}</td><td>${row.todayAvg}</td>`
+      + `<td>${row.standing ?? "\u2014"}</td><td class="${diffClass}">${diffTxt}</td>`
+      + `<td>${mishitTxt}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const mEl = document.getElementById("debriefMishits");
+  mEl.innerHTML = data.mishitRows.length ? "" : "<p style='color:var(--muted);font-size:0.8125rem'>No bad contact taps.</p>";
+  data.mishitRows.forEach(row => {
+    const rate = Math.round(100 * row.bad / row.swings);
+    const parts = Object.entries(row.breakdown).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + " " + n).join(", ");
+    const div = document.createElement("div");
+    div.className = "mishit-line";
+    div.innerHTML = `<span class="label">${row.club} \u2014 ${parts}</span><span>${rate}% (${row.bad}/${row.swings})</span>`;
+    mEl.appendChild(div);
+  });
+
+  const threePlus = data.putts.perHole.filter(p => p.putts >= 3).map(p => p.hole);
+  const onePutts = data.putts.perHole.filter(p => p.putts === 1).map(p => p.hole);
+  const pillRow = (arr, cls) => arr.length
+    ? `<p class="pill-row">${arr.map(h => `<span class="pill ${cls}">H${h}</span>`).join("")}</p>` : "";
+  document.getElementById("debriefPutts").innerHTML =
+    `<div class="mishit-line"><span class="label">Total</span><span>${data.putts.total}</span></div>`
+    + pillRow(threePlus, "three") + pillRow(onePutts, "one");
+
+  document.getElementById("debriefNudgeSummary").innerHTML = total === 0
+    ? "<p style='color:var(--muted);font-size:0.8125rem'>No water decisions graded.</p>"
+    : `<div class="mishit-line"><span class="label">Decisions graded</span><span>${total}</span></div>`
+    + `<div class="mishit-line"><span class="label">Blunders</span><span>${data.nudge.counts["BLUNDER"] || 0}</span></div>`
+    + `<div class="mishit-line"><span class="label">Cautious</span><span>${data.nudge.counts["CAUTIOUS"] || 0}</span></div>`;
+
+  const neEl = document.getElementById("debriefNudgeEvents");
+  neEl.innerHTML = "";
+  data.nudge.events.forEach(e => {
+    const cls = e.verdict === "BLUNDER" ? "blunder" : e.verdict === "CAUTIOUS" ? "cautious" : "solid";
+    const div = document.createElement("div");
+    div.className = "nudge-event";
+    div.innerHTML = `<span class="tag ${cls}">H${e.hole}</span>${e.reason}`
+      + (e.penalty ? ` \u2192 cost ${e.penalty} stroke(s)` : "");
+    neEl.appendChild(div);
+  });
+}
+
+function renderDebriefHole() {
+  const { data, holeIndex } = debriefState;
+  const hole = data.holes[holeIndex];
+
+  document.getElementById("holeNavLabel").textContent = "Hole " + hole.number;
+  document.getElementById("holePrev").disabled = holeIndex === 0;
+  document.getElementById("holeNext").disabled = holeIndex === data.holes.length - 1;
+
+  drawHoleCartoon(hole);
+
+  const swings = hole.shots.filter(s => s.club !== "in" && s.club !== "picked up").length;
+  const putts = hole.shots.filter(s => s.club === "Putt").length;
+  document.getElementById("holeCartoonCaption").textContent = swings + " shots, " + putts + " putts";
+}
+
+function drawHoleCartoon(hole) {
+  const svg = document.getElementById("holeCartoon");
+  svg.innerHTML = "";
+  const NS = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs) => {
+    const e = document.createElementNS(NS, tag);
+    Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
+    return e;
+  };
+
+  const pts = [];
+  if (hole.green) pts.push([hole.green.lat, hole.green.lng]);
+  (hole.hazards || []).forEach(hz => hz.polygon.forEach(p => pts.push(p)));
+  (hole.corners || []).forEach(c => pts.push([c.lat, c.lng]));
+  hole.shots.forEach(s => pts.push([s.lat, s.lng]));
+  if (!pts.length) return;
+
+  const lat0 = pts.reduce((a, p) => a + p[0], 0) / pts.length;
+  const lng0 = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+  const toXY = projector(lat0, lng0);
+
+  const anchorFrom = hole.shots.length ? hole.shots[0] : null;
+  const anchorTo = hole.green || (hole.shots.length ? hole.shots[hole.shots.length - 1] : null);
+  let angle = 0;
+  if (anchorFrom && anchorTo) {
+    const [fx, fy] = toXY(anchorFrom.lat, anchorFrom.lng);
+    const [tx, ty] = toXY(anchorTo.lat, anchorTo.lng);
+    angle = Math.atan2(tx - fx, ty - fy);
+  }
+  const toRotatedXY = (lat, lng) => {
+    const [x, y] = toXY(lat, lng);
+    return [x * Math.cos(angle) - y * Math.sin(angle),
+            x * Math.sin(angle) + y * Math.cos(angle)];
+  };
+
+  const xy = pts.map(p => toRotatedXY(p[0], p[1]));
+  const xs = xy.map(p => p[0]), ys = xy.map(p => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const spanX = Math.max(maxX - minX, 20), spanY = Math.max(maxY - minY, 20);
+  const PAD = 28, SIZE = 320;
+  const scale = Math.min((SIZE - 2 * PAD) / spanX, (SIZE - 2 * PAD) / spanY);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+
+  const project = (lat, lng) => {
+    const [x, y] = toRotatedXY(lat, lng);
+    return [SIZE / 2 + (x - cx) * scale, SIZE / 2 - (y - cy) * scale];
+  };
+
+  (hole.hazards || []).forEach(hz => {
+    const points = hz.polygon.map(p => project(p[0], p[1]).join(",")).join(" ");
+    svg.appendChild(el("polygon", { points, class: "hz-shape" }));
+  });
+
+  (hole.corners || []).forEach(c => {
+    const [x, y] = project(c.lat, c.lng);
+    svg.appendChild(el("circle", { cx: x, cy: y, r: 6, class: "corner-shape" }));
+  });
+
+  if (hole.green) {
+    const [x, y] = project(hole.green.lat, hole.green.lng);
+    svg.appendChild(el("circle", { cx: x, cy: y, r: 8, class: "green-shape" }));
+  }
+
+  if (hole.shots.length > 1) {
+    const linePts = hole.shots.map(s => project(s.lat, s.lng).join(",")).join(" ");
+    svg.appendChild(el("polyline", { points: linePts, class: "shot-line" }));
+  }
+
+  hole.shots.forEach((s, i) => {
+    const [x, y] = project(s.lat, s.lng);
+    const cls = "shot-dot" + (s.penalty ? " penal" : "") + (s.mishit ? " mishit" : "");
+    svg.appendChild(el("circle", { cx: x, cy: y, r: 6, class: cls }));
+    const t = el("text", { x, y: y - 9, class: "shot-num", "text-anchor": "middle" });
+    t.textContent = String(i + 1);
+    svg.appendChild(t);
+  });
+}
+
+/* ---- STATS SCREEN LOGIC ------------------------------------------ */
+
+function openStats() {
+  const playerId = document.getElementById("playerSelect").value;
+  const table = calculateClubTable(playerId);
+  showOverlay("stats");
+
+  document.getElementById("statsPlayerTitle").textContent = db.players[playerId].name + "'s Club Distances";
+
+  const tally = {};
+  db.rounds.forEach(r => {
+    if (r.playerId !== playerId || r.source !== "real" || r.mode !== "gps") return;
+    r.shots.forEach(shot => {
+      if (!shot.club || shot.lowConfidence) return;
+      const club = displayClub(shot.club);
+      tally[club] = tally[club] || { swings: 0, bad: {} };
+      tally[club].swings++;
+      if (shot.mishit) tally[club].bad[shot.mishit] = (tally[club].bad[shot.mishit] || 0) + 1;
+    });
+  });
+
+  const sumVals = obj => Object.values(obj).reduce((a, b) => a + b, 0);
+  const tbody = document.querySelector("#statsDistanceTable tbody");
+  tbody.innerHTML = "";
+
+  Object.entries(table.clubs)
+    .sort((a, b) => (b[1].typical || 0) - (a[1].typical || 0))
+    .forEach(([club, c]) => {
+      const t = tally[club];
+      const bad = t ? sumVals(t.bad) : 0;
+      const mishitTxt = t ? Math.round(100 * bad / t.swings) + "% (" + bad + "/" + t.swings + ")" : "\u2014";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${club}</td><td>${c.n}</td><td>${Math.round(c.mean)}</td>`
+        + `<td>${Math.round(c.safe)}</td>`
+        + `<td>${Math.round(c.mean * c.rolloutFraction)}</td>`
+        + `<td>${Math.round(c.carrySafe)}</td>`
+        + `<td>${mishitTxt}</td>`;
+      tbody.appendChild(tr);
+    });
+
+  const mEl = document.getElementById("statsMishits");
+  mEl.innerHTML = "";
+  const rows = Object.entries(tally)
+    .filter(([, v]) => Object.keys(v.bad).length)
+    .sort((a, b) => sumVals(b[1].bad) - sumVals(a[1].bad));
+
+  if (!rows.length) {
+    mEl.innerHTML = "<p style='color:var(--muted);font-size:0.8125rem'>No bad contact taps recorded.</p>";
+  }
+  rows.forEach(([club, v]) => {
+    const bad = sumVals(v.bad);
+    const rate = Math.round(100 * bad / v.swings);
+    const parts = Object.entries(v.bad).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + " " + n).join(", ");
+    const div = document.createElement("div");
+    div.className = "mishit-line";
+    div.innerHTML = `<span class="label">${club} \u2014 ${parts}</span><span>${rate}% (${bad}/${v.swings})</span>`;
+    mEl.appendChild(div);
+  });
+}
+
+/* ---- UI CONTROL HELPER ------------------------------------------- */
+
+const swingCount = round => round.shots.filter(s => s.club !== null).length;
+const strokeCount = round => round.shots.reduce((n, s) => n + (s.club === null ? 0 : 1) + (s.penaltyStrokes || 0), 0);
+
+function refreshControls() {
+  const round = activeRound();
+  const ready = Boolean(currentFix && round);
+  const shot = round && lastShot(round);
+  const taggable = Boolean(round && shot && shot.club !== null);
+
+  document.querySelectorAll("#clubs .club").forEach(b => { b.disabled = !ready; });
+  document.getElementById("puttBtn").disabled = !(round && (ready || currentGreenPosition()));
+
+  const pen = document.getElementById("penaltyBtn");
+  pen.disabled = !taggable;
+  const n = taggable ? shot.penaltyStrokes : 0;
+  pen.dataset.strokes = String(n);
+  pen.textContent = n === 0 ? "Add penalty" : "Penalty +" + n + " — tap to change";
+
+  document.querySelectorAll(".mishit").forEach(b => {
+    b.disabled = !taggable;
+    b.setAttribute("aria-pressed", String(taggable && shot.mishit === b.dataset.kind));
+  });
+
+  const hasShots = Boolean(round && round.shots.length);
+  document.getElementById("undoBtn").disabled = !hasShots;
+  document.getElementById("redoBtn").disabled = !redoStack.length;
+  document.getElementById("holedBtn").disabled = !(ready && hasShots);
+  document.getElementById("pickedUpBtn").disabled = !(ready && hasShots);
+}
 
 function populateSelects() {
   const pSelect = document.getElementById("playerSelect");
@@ -1210,52 +1812,23 @@ function populateSelects() {
   });
 }
 
-function showOverlay(name) {
-  currentScreen = name;
-  document.getElementById("startScreen").hidden = true;
-  document.getElementById("roundScreen").hidden = true;
-  document.getElementById("manualScreen").hidden = true;
-  document.getElementById("statsScreen").hidden = name !== "stats";
-  document.getElementById("debriefScreen").hidden = name !== "debrief";
-}
-
-function closeOverlay() {
-  currentScreen = null;
-  document.getElementById("statsScreen").hidden = true;
-  document.getElementById("debriefScreen").hidden = true;
-  render();
-}
-
-function openStats() {
-  const playerId = document.getElementById("playerSelect").value;
-  const table = calculateClubTable(playerId);
-  showOverlay("stats");
-
-  document.getElementById("statsPlayerTitle").textContent = db.players[playerId].name + "'s Club Distances";
-
-  const tbody = document.querySelector("#statsDistanceTable tbody");
-  tbody.innerHTML = "";
-  Object.entries(table.clubs).forEach(([club, c]) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${club}</td><td>${c.n}</td><td>${Math.round(c.mean)}</td>`
-      + `<td>${Math.round(c.safe)}</td><td>${Math.round(c.mean * c.rolloutFraction)}</td>`
-      + `<td>${Math.round(c.carrySafe)}</td><td>\u2014</td>`;
-    tbody.appendChild(tr);
-  });
-}
-
 function renderRounds() {
   const list = document.getElementById("rounds");
   list.innerHTML = "";
+  document.getElementById("roundsEmpty").hidden = db.rounds.length > 0;
+  document.getElementById("exportBtn").disabled = db.rounds.length === 0;
+
   [...db.rounds].reverse().forEach(round => {
     const li = document.createElement("li");
+
     const date = document.createElement("span");
     date.className = "date";
     date.textContent = new Date(round.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
     const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.textContent = (db.players[round.playerId]?.name || "Player") + " \u00B7 " + round.shots.length + " shots";
+    meta.className = "meta" + (round.source === "sim" ? " is-sim" : "");
+    meta.textContent = (db.players[round.playerId]?.name || "Player") + " \u00B7 " +
+      (round.mode === "manual" ? round.shots.length + " typed" : swingCount(round) + " swings \u00B7 " + strokeCount(round) + " strokes");
 
     const del = document.createElement("button");
     del.className = "del";
@@ -1263,8 +1836,49 @@ function renderRounds() {
     del.onclick = e => { e.stopPropagation(); deleteRound(round.id); };
 
     li.append(date, meta, del);
+
+    if (round.mode === "gps" && round.shots.length) {
+      li.classList.add("tappable");
+      li.addEventListener("click", () => openDebrief(round.id));
+    }
+
     list.append(li);
   });
+}
+
+function renderManual(round) {
+  document.getElementById("manualCount").textContent = round.shots.length + " shots";
+
+  const log = document.getElementById("manualLog");
+  log.innerHTML = "";
+  document.getElementById("manualEmpty").hidden = round.shots.length > 0;
+
+  [...round.shots].reverse().forEach((shot, idx) => {
+    const i = round.shots.length - idx;
+    const li = document.createElement("li");
+
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = String(i).padStart(2, "0");
+
+    const club = document.createElement("span");
+    club.className = "club-name";
+    club.textContent = shot.club;
+
+    const roll = shot.total - shot.carry;
+    const note = document.createElement("span");
+    note.className = "note";
+    note.textContent = roll > 0 ? "+" + Math.round(roll) + " roll" : "no roll";
+
+    const yds = document.createElement("span");
+    yds.className = "yds";
+    yds.innerHTML = Math.round(shot.carry) + ' <span class="total">/ ' + Math.round(shot.total) + "</span>";
+
+    li.append(n, club, note, yds);
+    log.append(li);
+  });
+
+  refreshManual();
 }
 
 function render() {
@@ -1277,42 +1891,127 @@ function render() {
   document.getElementById("manualScreen").hidden = !manual;
 
   if (!round) { renderRounds(); return; }
+  if (manual) { renderManual(round); return; }
 
+  const tag = document.getElementById("sourceTag");
+  tag.textContent = round.source === "sim" ? "SIMULATOR" : "REAL";
+  tag.classList.toggle("is-sim", round.source === "sim");
+
+  document.getElementById("strokes").textContent = swingCount(round) + " swings \u00B7 " + strokeCount(round) + " strokes";
   document.getElementById("holeNum").textContent = currentHole(round);
-  document.getElementById("strokes").textContent = round.shots.length + " swings";
+
+  const last = lastShot(round);
+  document.querySelectorAll("#clubs .club").forEach(b =>
+    b.classList.toggle("is-last", Boolean(last) && b.textContent === displayClub(last.club))
+  );
 
   const log = document.getElementById("log");
   log.innerHTML = "";
+  document.getElementById("empty").hidden = round.shots.length > 0;
+
   round.shots.forEach((shot, i) => {
     const dist = distanceFor(shot, round.shots[i + 1]);
     const li = document.createElement("li");
-    li.innerHTML = `<span class="n">${i+1}</span><span class="club-name">${shot.club}</span>`
-      + `<span class="note">${shot.penaltyStrokes ? '+1 pen' : ''}</span>`
-      + `<span class="yds">${dist.yards ? Math.round(dist.yards) + ' yds' : '\u2014'}</span>`;
+    if (shot.club === null) li.classList.add("is-end");
+
+    const n = document.createElement("span");
+    n.className = "n";
+    n.textContent = String(i + 1).padStart(2, "0");
+
+    const club = document.createElement("span");
+    club.className = "club-name";
+    club.textContent = displayClub(shot.club) ?? (shot.holeEnd === "picked_up" ? "up" : "in");
+
+    const note = document.createElement("span");
+    note.className = "note" + (shot.penaltyStrokes ? " is-penal" : "");
+    note.textContent = shot.penaltyStrokes ? "+" + shot.penaltyStrokes + " penalty"
+      : shot.mishit ? shot.mishit + " \u2014 excluded"
+      : shot.holeEnd === "picked_up" ? "picked up"
+      : shot.fromGreen ? "green (traced)"
+      : "\u00B1" + Math.round(shot.accuracy) + "m";
+
+    const yds = document.createElement("span");
+    if (dist.kind === "measured")      { yds.className = "yds";              yds.textContent = Math.round(dist.yards) + " yds"; }
+    else if (dist.kind === "floor")    { yds.className = "yds floor";        yds.textContent = "\u2265 " + Math.round(dist.yards) + " yds"; }
+    else if (dist.kind === "unknown")  { yds.className = "yds void";         yds.textContent = "replayed"; }
+    else if (dist.kind === "pending")  { yds.className = "yds pending";      yds.textContent = "in play"; }
+    else if (dist.kind === "putt")     { yds.className = "yds pending";      yds.textContent = "putt"; }
+    else                               { yds.className = "yds pending";      yds.textContent = "\u2014"; }
+
+    li.append(n, club, note, yds);
     log.append(li);
   });
 
+  refreshControls();
   renderNudge();
 }
 
-/* ---- init ---- */
+/* ---- BUILD CLUBS GRID -------------------------------------------- */
+
+function buildClubs() {
+  const wrap = document.getElementById("clubs");
+  wrap.innerHTML = "";
+  BAG.forEach(name => {
+    const b = document.createElement("button");
+    b.className = "club";
+    b.type = "button";
+    b.textContent = name;
+    b.addEventListener("click", () => capture(name));
+    wrap.append(b);
+  });
+
+  const mwrap = document.getElementById("manualClubs");
+  mwrap.innerHTML = "";
+  BAG.filter(c => c !== "?").forEach(name => {
+    const b = document.createElement("button");
+    b.className = "club";
+    b.type = "button";
+    b.textContent = name;
+    b.addEventListener("click", () => selectManualClub(name));
+    mwrap.append(b);
+  });
+}
+
+/* ---- INIT & EVENTS ----------------------------------------------- */
 
 db = load();
 courses = loadCourses();
 
-// Built-in default course (Glendale) fallback
+// Embed full traced Glendale course data as default
 if (!courses.glendale) {
   courses.glendale = {
     id: "glendale",
-    name: "Glendale Golf & CC",
+    name: "Glendale Golf and Country Club",
     holes: [
-      { number: 1, green: { lat: 49.87715, lng: -97.31516 }, hazards: [] },
-      { number: 2, green: { lat: 49.87978, lng: -97.31506 }, hazards: [] }
+      { number: 1, green: { lat: 49.877157, lng: -97.315161 }, hazards: [] },
+      { number: 2, green: { lat: 49.879789, lng: -97.315065 }, hazards: [
+        { type: "water", polygon: [[49.877299,-97.316052],[49.877421,-97.316073],[49.877428,-97.315915],[49.87742,-97.315789],[49.877406,-97.315679],[49.87739,-97.315623],[49.877373,-97.31559],[49.877338,-97.315588],[49.8773,-97.315599],[49.877281,-97.315617],[49.877264,-97.315658],[49.877288,-97.315778],[49.877316,-97.315861],[49.877331,-97.315936]] },
+        { type: "water", polygon: [[49.879664,-97.315671],[49.87965,-97.315513],[49.879668,-97.315424],[49.87969,-97.315376],[49.879733,-97.315352],[49.87982,-97.315287],[49.879879,-97.315279],[49.879955,-97.315282],[49.879993,-97.315266],[49.88005,-97.315349],[49.879875,-97.315711]] }
+      ]},
+      { number: 3, green: { lat: 49.880061, lng: -97.316127 }, hazards: [
+        { type: "water", polygon: [[49.880168,-97.314597],[49.880221,-97.314552],[49.880271,-97.314562],[49.880306,-97.314613],[49.880341,-97.314672],[49.880382,-97.314785],[49.88038,-97.315067],[49.88037,-97.31519],[49.880313,-97.315324],[49.88029,-97.315482],[49.88024,-97.315654],[49.880221,-97.315759],[49.880221,-97.315842],[49.880099,-97.315895],[49.879997,-97.315804],[49.879948,-97.315777],[49.880042,-97.315238],[49.880111,-97.315131]] }
+      ]},
+      { number: 4, green: { lat: 49.877120, lng: -97.316616 }, hazards: [] },
+      { number: 5, green: { lat: 49.874121, lng: -97.317250 }, hazards: [] },
+      { number: 6, green: { lat: 49.877666, lng: -97.318374 }, hazards: [] },
+      { number: 7, green: { lat: 49.878722, lng: -97.318838 }, hazards: [] },
+      { number: 8, green: { lat: 49.874321, lng: -97.318769 }, hazards: [] },
+      { number: 9, green: { lat: 49.873354, lng: -97.317527 }, hazards: [] },
+      { number: 10, green: { lat: 49.877185, lng: -97.313690 }, hazards: [] },
+      { number: 11, green: { lat: 49.880339, lng: -97.313871 }, hazards: [] },
+      { number: 12, green: { lat: 49.877689, lng: -97.313854 }, hazards: [] },
+      { number: 13, green: { lat: 49.880169, lng: -97.312121 }, hazards: [] },
+      { number: 14, green: { lat: 49.877010, lng: -97.312208 }, hazards: [] },
+      { number: 15, green: { lat: 49.871637, lng: -97.312302 }, hazards: [] },
+      { number: 16, green: { lat: 49.871810, lng: -97.313561 }, hazards: [] },
+      { number: 17, green: { lat: 49.876080, lng: -97.312645 }, hazards: [] },
+      { number: 18, green: { lat: 49.872956, lng: -97.314421 }, hazards: [] }
     ]
   };
   saveCourses();
 }
 
+buildClubs();
 populateSelects();
 
 document.getElementById("playerSelect").addEventListener("change", e => {
@@ -1337,8 +2036,12 @@ document.querySelectorAll(".start-choice").forEach(btn =>
 
 document.getElementById("penaltyBtn").addEventListener("click", cyclePenalty);
 document.getElementById("undoBtn").addEventListener("click", undo);
+document.getElementById("redoBtn").addEventListener("click", redo);
+document.querySelectorAll(".mishit").forEach(b =>
+  b.addEventListener("click", () => toggleMishit(b.dataset.kind))
+);
 document.getElementById("holedBtn").addEventListener("click", () => capture(null, "holed"));
-document.getElementById("puttBtn").addEventListener("click", () => capture("Putt"));
+document.getElementById("puttBtn").addEventListener("click", () => capture(PUTT_BUTTON));
 document.getElementById("pickedUpBtn").addEventListener("click", () => capture(null, "picked_up"));
 document.getElementById("endBtn").addEventListener("click", endRound);
 document.getElementById("exportBtn").addEventListener("click", exportJson);
@@ -1346,23 +2049,46 @@ document.getElementById("exportBtn").addEventListener("click", exportJson);
 document.getElementById("statsLink").addEventListener("click", openStats);
 document.getElementById("statsBack").addEventListener("click", closeOverlay);
 document.getElementById("debriefBack").addEventListener("click", closeOverlay);
+document.getElementById("holePrev").addEventListener("click", () => {
+  if (debriefState && debriefState.holeIndex > 0) {
+    debriefState.holeIndex--;
+    renderDebriefHole();
+  }
+});
+document.getElementById("holeNext").addEventListener("click", () => {
+  if (debriefState && debriefState.holeIndex < debriefState.data.holes.length - 1) {
+    debriefState.holeIndex++;
+    renderDebriefHole();
+  }
+});
+
+document.getElementById("manualAddBtn").addEventListener("click", addManualShot);
+document.getElementById("manualUndoBtn").addEventListener("click", undoManual);
+document.getElementById("manualEndBtn").addEventListener("click", endRound);
+document.getElementById("carryInput").addEventListener("input", refreshManual);
+document.getElementById("totalInput").addEventListener("input", refreshManual);
+document.getElementById("totalInput").addEventListener("keydown", e => { if (e.key === "Enter") addManualShot(); });
+document.getElementById("carryInput").addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("totalInput").focus(); });
+
+document.getElementById("holeStrip").addEventListener("click", () => {
+  const round = activeRound();
+  if (!round) return;
+  const answer = prompt("Which hole are you on?", currentHole(round));
+  const n = Number(answer);
+  if (n >= 1 && n <= HOLES_PER_ROUND) setHole(n);
+});
 
 document.getElementById("importInput").addEventListener("change", e => {
   if (e.target.files[0]) importJson(e.target.files[0]);
+  e.target.value = "";
 });
 
 document.getElementById("importCourseInput").addEventListener("change", e => {
   if (e.target.files[0]) importCourseJson(e.target.files[0]);
+  e.target.value = "";
 });
 
-BAG.forEach(name => {
-  const b = document.createElement("button");
-  b.className = "club";
-  b.textContent = name;
-  b.onclick = () => capture(name);
-  document.getElementById("clubs").appendChild(b);
-});
-
+showIdle("Tap the club in your hand.");
 render();
 </script>
 </body>
