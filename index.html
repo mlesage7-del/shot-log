@@ -1972,29 +1972,30 @@ function buildClubs() {
   });
 }
 
-/* ---- INIT & EVENTS ----------------------------------------------- */
+/* ---- INIT & UNCONDITIONAL COURSE FETCH --------------------------- */
 
 db = load();
 courses = loadCourses();
 
-// Automatically load standalone course.json from the repository root
-if (!courses.glendale) {
-  fetch("course.json")
-    .then(res => res.json())
-    .then(data => {
+async function syncCourseFile() {
+  try {
+    const res = await fetch("course.json?v=" + Date.now());
+    if (res.ok) {
+      const data = await res.json();
       const id = data.id || "glendale";
       courses[id] = data;
       saveCourses();
       populateSelects();
       render();
-    })
-    .catch(err => {
-      console.warn("No local course.json auto-loaded. Import via UI if needed.");
-    });
+    }
+  } catch (err) {
+    console.warn("Could not fetch course.json automatically:", err);
+  }
 }
 
 buildClubs();
 populateSelects();
+syncCourseFile();
 
 document.getElementById("playerSelect").addEventListener("change", e => {
   db.activePlayerId = e.target.value;
