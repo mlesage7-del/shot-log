@@ -1,23 +1,21 @@
 /*
  * SHOT LOG - APP.JS
- * UPDATE DATE & TIME: 2026-08-12 14:20:00 CDT
- * PRIMARY CHANGES: 
- * 1. Fixed Course Tracer link navigation (routes to trace-v2.html).
- * 2. Putts isolated from GPS fixes (default to green coordinates).
- * 3. Profile isolation & Super User protection for 'Matt'.
- * 4. PWA lifecycle, GPS watch listeners, and screen routing.
+ * UPDATE DATE & TIME: 2026-08-12 14:26:36 CDT
  */
 
 "use strict";
 
-let db = null;
-let courses = {};
-let currentFix = null;
-let currentFixAt = 0;
-let currentScreen = null;
-let debriefState = null;
-let redoStack = [];
-let manualClub = null;
+var db = null;
+var courses = {};
+var currentFix = null;
+var currentFixAt = 0;
+var currentScreen = null;
+var debriefState = null;
+var redoStack = [];
+var manualClub = null;
+
+window.db = db;
+window.courses = courses;
 
 function loadCourses() {
   const raw = localStorage.getItem(COURSES_KEY);
@@ -58,7 +56,11 @@ function load() {
   catch (err) { return migrate({ schemaVersion: SCHEMA_VERSION, players: {}, rounds: [] }); }
 }
 
-const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+function save() {
+  window.db = db;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+}
+
 const activeRound = () => db.rounds.find(r => !r.endedAt) || null;
 const lastShot = round => round.shots[round.shots.length - 1] ?? null;
 
@@ -217,6 +219,20 @@ function deleteRound(id) {
   if (!confirm("Delete this round permanently?")) return;
   db.rounds = db.rounds.filter(r => r.id !== id);
   save();
+  render();
+}
+
+function deletePlayer(playerId) {
+  if (playerId === "matt") {
+    alert("Matt is the Super User profile and cannot be removed.");
+    return;
+  }
+  if (!confirm(`Delete profile '${db.players[playerId].name}' and all associated rounds?`)) return;
+  delete db.players[playerId];
+  db.rounds = db.rounds.filter(r => r.playerId !== playerId);
+  db.activePlayerId = "matt";
+  save();
+  populateSelects();
   render();
 }
 
@@ -474,6 +490,7 @@ function showOverlay(name) {
 function closeOverlay() {
   currentScreen = null;
   debriefState = null;
+  window.debriefState = null;
   document.getElementById("statsScreen").hidden = true;
   document.getElementById("debriefScreen").hidden = true;
   render();
@@ -560,7 +577,7 @@ function renderRounds() {
 
     if (round.mode === "gps" && round.shots.length) {
       li.classList.add("tappable");
-      li.addEventListener("click", () => openDebrief(round.id));
+      li.addEventListener("click", () => window.openDebrief(round.id));
     }
 
     list.append(li);
@@ -697,6 +714,7 @@ async function syncCourseFile() {
     if (res.ok) {
       const data = await res.json();
       courses[data.id || "glendale"] = data;
+      window.courses = courses;
       saveCourses();
       populateSelects();
       render();
@@ -709,6 +727,8 @@ async function syncCourseFile() {
 /* ---- INIT APP ---- */
 db = load();
 courses = loadCourses();
+window.db = db;
+window.courses = courses;
 
 buildClubs();
 populateSelects();
@@ -752,19 +772,19 @@ document.getElementById("pickedUpBtn").addEventListener("click", () => capture(n
 document.getElementById("endBtn").addEventListener("click", endRound);
 document.getElementById("exportBtn").addEventListener("click", exportJson);
 
-document.getElementById("statsLink").addEventListener("click", openStats);
+document.getElementById("statsLink").addEventListener("click", () => window.openStats());
 document.getElementById("statsBack").addEventListener("click", closeOverlay);
 document.getElementById("debriefBack").addEventListener("click", closeOverlay);
 document.getElementById("holePrev").addEventListener("click", () => {
-  if (debriefState && debriefState.holeIndex > 0) {
-    debriefState.holeIndex--;
-    renderDebriefHole();
+  if (window.debriefState && window.debriefState.holeIndex > 0) {
+    window.debriefState.holeIndex--;
+    window.renderDebriefHole();
   }
 });
 document.getElementById("holeNext").addEventListener("click", () => {
-  if (debriefState && debriefState.holeIndex < debriefState.data.holes.length - 1) {
-    debriefState.holeIndex++;
-    renderDebriefHole();
+  if (window.debriefState && window.debriefState.holeIndex < window.debriefState.data.holes.length - 1) {
+    window.debriefState.holeIndex++;
+    window.renderDebriefHole();
   }
 });
 
@@ -793,6 +813,10 @@ document.getElementById("importCourseInput").addEventListener("change", e => {
   if (e.target.files[0]) importCourseJson(e.target.files[0]);
   e.target.value = "";
 });
+
+window.showOverlay = showOverlay;
+window.swingCount = swingCount;
+window.strokeCount = strokeCount;
 
 showIdle("Tap the club in your hand.");
 render();
