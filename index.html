@@ -1574,7 +1574,7 @@ function renderDebriefSummary(data) {
     const parts = Object.entries(row.breakdown).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + " " + n).join(", ");
     const div = document.createElement("div");
     div.className = "mishit-line";
-    div.innerHTML = `<span class="label">${row.club} \u2014 ${parts}</span><span>${rate}% (${row.bad}/${row.swings})</span>`;
+    div.innerHTML = `<span class="label">${row.club} \u2014 ${parts}</span><span>${rate}% (${bad}/${v.swings})</span>`;
     mEl.appendChild(div);
   });
 
@@ -1977,38 +1977,20 @@ function buildClubs() {
 db = load();
 courses = loadCourses();
 
-// Embed full traced Glendale course data as default
+// Automatically load standalone course.json from the repository root
 if (!courses.glendale) {
-  courses.glendale = {
-    id: "glendale",
-    name: "Glendale Golf and Country Club",
-    holes: [
-      { number: 1, green: { lat: 49.877157, lng: -97.315161 }, hazards: [] },
-      { number: 2, green: { lat: 49.879789, lng: -97.315065 }, hazards: [
-        { type: "water", polygon: [[49.877299,-97.316052],[49.877421,-97.316073],[49.877428,-97.315915],[49.87742,-97.315789],[49.877406,-97.315679],[49.87739,-97.315623],[49.877373,-97.31559],[49.877338,-97.315588],[49.8773,-97.315599],[49.877281,-97.315617],[49.877264,-97.315658],[49.877288,-97.315778],[49.877316,-97.315861],[49.877331,-97.315936]] },
-        { type: "water", polygon: [[49.879664,-97.315671],[49.87965,-97.315513],[49.879668,-97.315424],[49.87969,-97.315376],[49.879733,-97.315352],[49.87982,-97.315287],[49.879879,-97.315279],[49.879955,-97.315282],[49.879993,-97.315266],[49.88005,-97.315349],[49.879875,-97.315711]] }
-      ]},
-      { number: 3, green: { lat: 49.880061, lng: -97.316127 }, hazards: [
-        { type: "water", polygon: [[49.880168,-97.314597],[49.880221,-97.314552],[49.880271,-97.314562],[49.880306,-97.314613],[49.880341,-97.314672],[49.880382,-97.314785],[49.88038,-97.315067],[49.88037,-97.31519],[49.880313,-97.315324],[49.88029,-97.315482],[49.88024,-97.315654],[49.880221,-97.315759],[49.880221,-97.315842],[49.880099,-97.315895],[49.879997,-97.315804],[49.879948,-97.315777],[49.880042,-97.315238],[49.880111,-97.315131]] }
-      ]},
-      { number: 4, green: { lat: 49.877120, lng: -97.316616 }, hazards: [] },
-      { number: 5, green: { lat: 49.874121, lng: -97.317250 }, hazards: [] },
-      { number: 6, green: { lat: 49.877666, lng: -97.318374 }, hazards: [] },
-      { number: 7, green: { lat: 49.878722, lng: -97.318838 }, hazards: [] },
-      { number: 8, green: { lat: 49.874321, lng: -97.318769 }, hazards: [] },
-      { number: 9, green: { lat: 49.873354, lng: -97.317527 }, hazards: [] },
-      { number: 10, green: { lat: 49.877185, lng: -97.313690 }, hazards: [] },
-      { number: 11, green: { lat: 49.880339, lng: -97.313871 }, hazards: [] },
-      { number: 12, green: { lat: 49.877689, lng: -97.313854 }, hazards: [] },
-      { number: 13, green: { lat: 49.880169, lng: -97.312121 }, hazards: [] },
-      { number: 14, green: { lat: 49.877010, lng: -97.312208 }, hazards: [] },
-      { number: 15, green: { lat: 49.871637, lng: -97.312302 }, hazards: [] },
-      { number: 16, green: { lat: 49.871810, lng: -97.313561 }, hazards: [] },
-      { number: 17, green: { lat: 49.876080, lng: -97.312645 }, hazards: [] },
-      { number: 18, green: { lat: 49.872956, lng: -97.314421 }, hazards: [] }
-    ]
-  };
-  saveCourses();
+  fetch("course.json")
+    .then(res => res.json())
+    .then(data => {
+      const id = data.id || "glendale";
+      courses[id] = data;
+      saveCourses();
+      populateSelects();
+      render();
+    })
+    .catch(err => {
+      console.warn("No local course.json auto-loaded. Import via UI if needed.");
+    });
 }
 
 buildClubs();
