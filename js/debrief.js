@@ -1,6 +1,6 @@
 /*
  * SHOT LOG - DEBRIEF.JS
- * UPDATE DATE & TIME: 2026-08-12 14:23:15 CDT
+ * UPDATE DATE & TIME: 2026-08-12 14:26:36 CDT
  */
 
 "use strict";
@@ -45,7 +45,7 @@ function gradeShot(club, clubEntry, nudgeResult) {
 }
 
 function buildDebriefData(round) {
-  const course = courses[round.courseId];
+  const course = window.courses[round.courseId];
   const clubTable = calculateClubTable(round.playerId || "matt");
   const holeGroups = reconstructRoundHoles(round);
   const holesOut = [];
@@ -138,14 +138,14 @@ function buildDebriefData(round) {
 }
 
 function openDebrief(roundId) {
-  const round = db.rounds.find(r => r.id === roundId);
+  const round = window.db.rounds.find(r => r.id === roundId);
   if (!round) return;
 
   const data = buildDebriefData(round);
-  debriefState = { data, holeIndex: 0 };
-  showOverlay("debrief");
+  window.debriefState = { data, holeIndex: 0 };
+  window.showOverlay("debrief");
 
-  const course = courses[round.courseId];
+  const course = window.courses[round.courseId];
   document.getElementById("debriefTitle").textContent =
     (course ? course.name : "Round") + " \u2014 " + new Date(round.startedAt).toLocaleDateString();
 
@@ -154,8 +154,8 @@ function openDebrief(roundId) {
 }
 
 function renderDebriefSummary(data) {
-  const swings = swingCount(data.round);
-  const strokes = strokeCount(data.round);
+  const swings = window.swingCount(data.round);
+  const strokes = window.strokeCount(data.round);
   const sumVals = obj => Object.values(obj).reduce((a, b) => a + b, 0);
   const total = sumVals(data.nudge.counts);
   const solid = (data.nudge.counts["SOLID GO"] || 0) + (data.nudge.counts["SOLID LAYUP"] || 0);
@@ -223,7 +223,7 @@ function renderDebriefSummary(data) {
 }
 
 function renderDebriefHole() {
-  const { data, holeIndex } = debriefState;
+  const { data, holeIndex } = window.debriefState;
   const hole = data.holes[holeIndex];
 
   document.getElementById("holeNavLabel").textContent = "Hole " + hole.number;
@@ -363,7 +363,7 @@ function renderHoleClubTable(hole) {
 
 function renderDebriefPenaltyAnalysis(data) {
   const activePlayer = data.round.playerId || "matt";
-  const playerRounds = db.rounds.filter(r => (r.playerId || "matt") === activePlayer && r.mode === "gps" && r.endedAt);
+  const playerRounds = window.db.rounds.filter(r => (r.playerId || "matt") === activePlayer && r.mode === "gps" && r.endedAt);
   
   let currentPenalties = 0;
   let currentMishits = 0;
@@ -391,6 +391,66 @@ function renderDebriefPenaltyAnalysis(data) {
   `;
 }
 
-// EXPORT GLOBALLY FOR APP.JS ROUTING
+function openStats() {
+  const playerId = document.getElementById("playerSelect").value;
+  const table = calculateClubTable(playerId);
+  window.showOverlay("stats");
+
+  const playerName = (window.db.players[playerId] && window.db.players[playerId].name) ? window.db.players[playerId].name : "Player";
+  document.getElementById("statsPlayerTitle").textContent = playerName + "'s Club Distances";
+
+  const tally = {};
+  window.db.rounds.forEach(r => {
+    if (r.playerId !== playerId || r.source !== "real" || r.mode !== "gps") return;
+    r.shots.forEach(shot => {
+      if (!shot.club || shot.lowConfidence) return;
+      const club = displayClub(shot.club);
+      tally[club] = tally[club] || { swings: 0, bad: {} };
+      tally[club].swings++;
+      if (shot.mishit) tally[club].bad[shot.mishit] = (tally[club].bad[shot.mishit] || 0) + 1;
+    });
+  });
+
+  const sumVals = obj => Object.values(obj).reduce((a, b) => a + b, 0);
+  const tbody = document.querySelector("#statsDistanceTable tbody");
+  tbody.innerHTML = "";
+
+  Object.entries(table.clubs)
+    .sort((a, b) => (b[1].typical || 0) - (a[1].typical || 0))
+    .forEach(([club, c]) => {
+      const t = tally[club];
+      const bad = t ? sumVals(t.bad) : 0;
+      const mishitTxt = t && t.swings ? Math.round(100 * bad / t.swings) + "% (" + bad + "/" + t.swings + ")" : "\u2014";
+
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${club}</td><td>${c.n}</td><td>${Math.round(c.mean)}</td>`
+        + `<td>${Math.round(c.safe)}</td>`
+        + `<td>${Math.round(c.mean * c.rolloutFraction)}</td>`
+        + `<td>${Math.round(c.carrySafe)}</td>`
+        + `<td>${mishitTxt}</td>`;
+      tbody.appendChild(tr);
+    });
+
+  const mEl = document.getElementById("statsMishits");
+  mEl.innerHTML = "";
+  const rows = Object.entries(tally)
+    .filter(([, v]) => Object.keys(v.bad).length)
+    .sort((a, b) => sumVals(b[1].bad) - sumVals(a[1].bad));
+
+  if (!rows.length) {
+    mEl.innerHTML = "<p style='color:var(--muted);font-size:0.8125rem'>No bad contact taps recorded.</p>";
+  }
+  rows.forEach(([club, v]) => {
+    const bad = sumVals(v.bad);
+    const rate = Math.round(100 * bad / v.swings);
+    const parts = Object.entries(v.bad).sort((a, b) => b[1] - a[1]).map(([k, n]) => k + " " + n).join(", ");
+    const div = document.createElement("div");
+    div.className = "mishit-line";
+    div.innerHTML = `<span class="label">${club} \u2014 ${parts}</span><span>${rate}% (${bad}/${v.swings})</span>`;
+    mEl.appendChild(div);
+  });
+}
+
 window.openDebrief = openDebrief;
 window.renderDebriefHole = renderDebriefHole;
+window.openStats = openStats;
