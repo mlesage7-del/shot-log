@@ -292,3 +292,46 @@ hr { border: none; border-top: 1px solid var(--rule); margin: 2rem 0 1.5rem; }
 .shot-dot.penal { fill: var(--poor); }
 .shot-num { font: 600 8px var(--mono); fill: var(--ink); }
 .penal-x { font: 700 12px var(--sans); fill: var(--poor); }
+
+/* ---- Debrief Badges & Nudge Commentary Extensions ---- */
+.pill-row {
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.pill-row .pill {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 2px;
+  font-size: 0.6875rem;
+  font-family: var(--mono);
+  color: var(--paper);
+  font-weight: 600;
+}
+
+.pill.three { background: var(--penalty); }
+.pill.one   { background: var(--good); }
+
+.nudge-event {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--rule);
+  line-height: 1.4;
+}
+
+.nudge-event .tag {
+  font-weight: 700;
+  margin-right: 0.4rem;
+  font-size: 0.6875rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 2px;
+  color: var(--paper);
+}
+
+.nudge-event .tag.blunder  { background: var(--poor); }
+.nudge-event .tag.solid    { background: var(--good); }
+.nudge-event .tag.cautious { background: var(--penalty); }
+
